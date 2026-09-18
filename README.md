@@ -4,12 +4,12 @@
 
 **Network:** Ethereum Sepolia
 
-**Contract Address:** `0xF049FA7546A6EA2e52a17E0932891dD6DdC7f57d`
+**Contract Address:** `0x807EB6317FbdF219C18B58ac0BF941bC4af268D5`
 
-**Block:** `11729754`
+**Block:** `11730752`
 
 **Deployment Cost:** `0.001384870930662582 ETH`
 
-**Gas Used:** `1,291,158`
+**Gas Used:** `1876010`
 
-**Gas Price:** `1.072580529 gwei`
+**Gas Price:** `0.001 gwei `

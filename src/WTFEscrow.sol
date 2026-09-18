@@ -1,12 +1,8 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 contract WTFEscrow {
-
-    
     // 1. ESCROW STATES
-    
 
     enum EscrowState {
         Active,
@@ -16,9 +12,7 @@ contract WTFEscrow {
         Resolved
     }
 
-    
     // 2. ESCROW DATA
-    
 
     struct Escrow {
         address payable buyer;
@@ -31,9 +25,7 @@ contract WTFEscrow {
 
     uint256 public nextEscrowId;
 
-    
     // 3. DISPUTE DATA
-    
 
     uint256 public constant DISPUTE_WINDOW = 72 hours;
 
@@ -45,42 +37,21 @@ contract WTFEscrow {
 
     mapping(uint256 => address) public disputeInitiator;
 
-    
     // 4. EVENTS
-    
 
-    event EscrowCreated(
-        uint256 indexed escrowId,
-        address indexed buyer,
-        address indexed seller,
-        uint256 amount
-    );
+    event EscrowCreated(uint256 indexed escrowId, address indexed buyer, address indexed seller, uint256 amount);
 
-    event EscrowReleased(
-        uint256 indexed escrowId,
-        uint256 amount
-    );
+    event EscrowReleased(uint256 indexed escrowId, uint256 amount);
 
-    event EscrowRefunded(
-        uint256 indexed escrowId,
-        uint256 amount
-    );
+    event EscrowRefunded(uint256 indexed escrowId, uint256 amount);
 
-    event DisputeRaised(
-        uint256 indexed escrowId,
-        address indexed raisedBy,
-        uint256 timestamp
-    );
+    event DisputeRaised(uint256 indexed escrowId, address indexed raisedBy, uint256 timestamp);
 
-    event DisputeResolved(
-        uint256 indexed escrowId,
-        address indexed winner,
-        uint256 amountReleased
-    );
+    event DisputeResolved(uint256 indexed escrowId, address indexed winner, uint256 amountReleased);
 
-    
+    event DeliveryAcknowledged( uint256 indexed escrowId,uint256 timestamp);
+
     // 5. CUSTOM ERRORS
-    
 
     error NotPartyToEscrow();
     error DisputeWindowClosed();
@@ -94,58 +65,37 @@ contract WTFEscrow {
     error IncorrectPayment();
     error TransferFailed();
 
-    
     // 6. CONSTRUCTOR
-    
 
     constructor(address _arbitrator) {
         arbitrator = _arbitrator;
     }
 
-    
     // 7. CREATE ESCROW
-    
 
-    function createEscrow(
-        address payable seller
-    ) external payable returns (uint256 escrowId) {
-
+    function createEscrow(address payable seller) external payable returns (uint256 escrowId) {
         if (msg.value == 0) {
             revert IncorrectPayment();
         }
 
         escrowId = nextEscrowId++;
 
-        escrows[escrowId] = Escrow({
-            buyer: payable(msg.sender),
-            seller: seller,
-            amount: msg.value,
-            state: EscrowState.Active
-        });
+        escrows[escrowId] =
+            Escrow({buyer: payable(msg.sender), seller: seller, amount: msg.value, state: EscrowState.Active});
 
-        emit EscrowCreated(
-            escrowId,
-            msg.sender,
-            seller,
-            msg.value
-        );
+        emit EscrowCreated(escrowId, msg.sender, seller, msg.value);
     }
 
-    
-    // 8. CONFIRM DELIVERY
-    
+    // 8. Ack DELIVERY
 
-    function confirmDelivery(
-        uint256 escrowId
-    ) external {
-
+    function acknowledgeDelivery(uint256 escrowId) external {
         Escrow storage e = escrows[escrowId];
 
         if (e.buyer == address(0)) {
             revert InvalidEscrow();
         }
 
-        // Only buyer can confirm delivery.
+        // Only buyer can acknowledge delivery.
         if (msg.sender != e.buyer) {
             revert NotPartyToEscrow();
         }
@@ -154,37 +104,59 @@ contract WTFEscrow {
             revert InvalidState();
         }
 
-        // Record when delivery was confirmed.
+        // Prevent delivery from being acknowledged twice.
+        if (deliveryConfirmedAt[escrowId] != 0) {
+            revert InvalidState();
+        }
+
+        // Start the 72-hour dispute window.
         deliveryConfirmedAt[escrowId] = block.timestamp;
+        emit DeliveryAcknowledged(escrowId, block.timestamp);
+    }
+
+    //9.Actual Release
+
+    function releaseAfterWindow(uint256 escrowId) external {
+        Escrow storage e = escrows[escrowId];
+
+        if (e.buyer == address(0)) {
+            revert InvalidEscrow();
+        }
+
+        // Delivery must have been acknowledged first.
+        if (deliveryConfirmedAt[escrowId] == 0) {
+            revert InvalidState();
+        }
+
+        // 72 hours must have passed.
+        if (block.timestamp < deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
+            revert DisputeWindowClosed();
+        }
+
+        // Escrow must still be active.
+        // If disputed, it cannot be released automatically.
+        if (e.state != EscrowState.Active) {
+            revert InvalidState();
+        }
 
         uint256 amount = e.amount;
 
-        // Existing happy path:
-        // Active -> Released
         e.state = EscrowState.Released;
         e.amount = 0;
 
         // Release funds to seller.
-        (bool success, ) = e.seller.call{value: amount}("");
+        (bool success,) = e.seller.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
 
-        emit EscrowReleased(
-            escrowId,
-            amount
-        );
+        emit EscrowReleased(escrowId, amount);
     }
 
-    
-    // 9. CANCEL ESCROW
-    
+    // 10. CANCEL ESCROW
 
-    function cancelEscrow(
-        uint256 escrowId
-    ) external {
-
+    function cancelEscrow(uint256 escrowId) external {
         Escrow storage e = escrows[escrowId];
 
         if (e.buyer == address(0)) {
@@ -206,43 +178,35 @@ contract WTFEscrow {
         e.amount = 0;
 
         // Refund buyer.
-        (bool success, ) = e.buyer.call{value: amount}("");
+        (bool success,) = e.buyer.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
 
-        emit EscrowRefunded(
-            escrowId,
-            amount
-        );
+        emit EscrowRefunded(escrowId, amount);
     }
 
-    
-    // 10. RAISE DISPUTE
-    
+    // // 11. RAISE DISPUTE
 
-    function raiseDispute(
-        uint256 escrowId
-    ) external {
-
+    function raiseDispute(uint256 escrowId) external {
         Escrow storage e = escrows[escrowId];
 
+        // DisputeAlreadyRaised error wire
+        if (disputeRaised[escrowId]) {
+            revert DisputeAlreadyRaised();
+        }
+
         // Only buyer or seller can raise a dispute.
-        if (
-            msg.sender != e.buyer &&
-            msg.sender != e.seller
-        ) {
+        if (msg.sender != e.buyer && msg.sender != e.seller) {
             revert NotPartyToEscrow();
         }
 
         // Disputes cannot be raised after the escrow
         // has been released, refunded, disputed, or resolved.
         if (
-            e.state == EscrowState.Released ||
-            e.state == EscrowState.Refunded ||
-            e.state == EscrowState.Disputed ||
-            e.state == EscrowState.Resolved
+            e.state == EscrowState.Released || e.state == EscrowState.Refunded || e.state == EscrowState.Disputed
+                || e.state == EscrowState.Resolved
         ) {
             revert DisputeWindowClosed();
         }
@@ -250,11 +214,7 @@ contract WTFEscrow {
         // If delivery has been confirmed,
         // enforce the 72-hour dispute window.
         if (deliveryConfirmedAt[escrowId] != 0) {
-
-            if (
-                block.timestamp >
-                deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW
-            ) {
+            if (block.timestamp > deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
                 revert DisputeWindowClosed();
             }
         }
@@ -265,22 +225,12 @@ contract WTFEscrow {
 
         disputeInitiator[escrowId] = msg.sender;
 
-        emit DisputeRaised(
-            escrowId,
-            msg.sender,
-            block.timestamp
-        );
+        emit DisputeRaised(escrowId, msg.sender, block.timestamp);
     }
 
-    
-    // 11. RESOLVE DISPUTE
-    
+    // 12. RESOLVE DISPUTE
 
-    function resolveDispute(
-        uint256 escrowId,
-        address winner
-    ) external {
-
+    function resolveDispute(uint256 escrowId, address winner) external {
         // Only arbitrator can resolve disputes.
         if (msg.sender != arbitrator) {
             revert NotArbitrator();
@@ -294,10 +244,7 @@ contract WTFEscrow {
         }
 
         // Winner must be buyer or seller.
-        if (
-            winner != e.buyer &&
-            winner != e.seller
-        ) {
+        if (winner != e.buyer && winner != e.seller) {
             revert NotPartyToEscrow();
         }
 
@@ -307,16 +254,12 @@ contract WTFEscrow {
         e.amount = 0;
 
         // Send funds to the winning party.
-        (bool success, ) = winner.call{value: amount}("");
+        (bool success,) = winner.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
 
-        emit DisputeResolved(
-            escrowId,
-            winner,
-            amount
-        );
+        emit DisputeResolved(escrowId, winner, amount);
     }
 }

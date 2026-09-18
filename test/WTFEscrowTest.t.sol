@@ -16,9 +16,9 @@ contract WTFEscrowTest is Test {
 
     uint256 constant ESCROW_AMOUNT = 1 ether;
 
-    
+
     // SETUP
-    
+
 
     function setUp() public {
         buyer = makeAddr("buyer");
@@ -34,9 +34,9 @@ contract WTFEscrowTest is Test {
         vm.deal(thirdParty, 10 ether);
     }
 
-    
+
     // HELPER: CREATE ESCROW
-    
+
 
     function createTestEscrow()
         internal
@@ -49,10 +49,10 @@ contract WTFEscrowTest is Test {
         }(payable(seller));
     }
 
-    
+
     // TEST 1
     // Buyer can raise dispute
-    
+
 
     function test_BuyerCanRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -91,10 +91,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    
+
     // TEST 2
     // Seller can raise dispute
-    
+
 
     function test_SellerCanRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -133,10 +133,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    
+
     // TEST 3
     // Third party cannot raise dispute
-    
+
 
     function test_ThirdPartyCannotRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -150,41 +150,37 @@ contract WTFEscrowTest is Test {
         escrow.raiseDispute(escrowId);
     }
 
-    
+
     // TEST 4
-    // Dispute window closed after delivery confirmation
-    
+    //Dispute cannot be raised after the 72-hour window
+
 
     function test_DisputeWindowExpiredReverts() public {
         uint256 escrowId = createTestEscrow();
 
-        // Buyer confirms delivery.
-        // According to the contract, this immediately
-        // releases the escrow.
-        vm.prank(buyer);
-
-        escrow.confirmDelivery(escrowId);
+       vm.prank(buyer);
+        escrow.acknowledgeDelivery(escrowId);
 
         // Move beyond the 72-hour window.
         vm.warp(
-            block.timestamp +
-            escrow.DISPUTE_WINDOW() +
-            1
-        );
+    block.timestamp +
+    escrow.DISPUTE_WINDOW() +
+    1
+);
 
-        vm.prank(buyer);
+    vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.DisputeWindowClosed.selector
-        );
+    vm.expectRevert(
+    WTFEscrow.DisputeWindowClosed.selector
+    );
 
-        escrow.raiseDispute(escrowId);
+    escrow.raiseDispute(escrowId);
     }
 
-    
+
     // TEST 5
     // Arbitrator resolves dispute to buyer
-    
+
 
     function test_ArbitratorResolvesToBuyer() public {
         uint256 escrowId = createTestEscrow();
@@ -237,10 +233,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    
+
     // TEST 6
     // Non-arbitrator cannot resolve dispute
-    
+
 
     function test_NonArbitratorCannotResolve() public {
         uint256 escrowId = createTestEscrow();
@@ -263,10 +259,81 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    
+
+
+    // Acknowledge TEST
+
+
+    function test_BuyerAcknowledgesDelivery() public {
+    uint256 escrowId = createTestEscrow();
+
+    vm.prank(buyer);
+    escrow.acknowledgeDelivery(escrowId);
+
+    assertGt(
+        escrow.deliveryConfirmedAt(escrowId),
+        0
+    );
+
+    (
+        ,
+        ,
+        uint256 amount,
+        WTFEscrow.EscrowState state
+    ) = escrow.escrows(escrowId);
+
+    assertEq(amount, ESCROW_AMOUNT);
+
+    assertEq(
+        uint256(state),
+        uint256(WTFEscrow.EscrowState.Active)
+    );
+}
+
+
+    //  ReleaseTest
+
+    function test_ReleaseAfterWindow() public {
+    uint256 escrowId = createTestEscrow();
+
+    vm.prank(buyer);
+    escrow.acknowledgeDelivery(escrowId);
+
+    uint256 sellerBalanceBefore = seller.balance;
+
+    vm.warp(
+        block.timestamp +
+        escrow.DISPUTE_WINDOW()
+    );
+
+    escrow.releaseAfterWindow(escrowId);
+
+    uint256 sellerBalanceAfter = seller.balance;
+
+    assertEq(
+        sellerBalanceAfter,
+        sellerBalanceBefore + ESCROW_AMOUNT
+    );
+
+    (
+        ,
+        ,
+        uint256 amount,
+        WTFEscrow.EscrowState state
+    ) = escrow.escrows(escrowId);
+
+    assertEq(amount, 0);
+
+    assertEq(
+        uint256(state),
+        uint256(WTFEscrow.EscrowState.Released)
+    );
+}
+
+
     // BONUS TEST 1
     // Cannot raise dispute twice
-    
+
 
     function test_CannotRaiseDisputeTwice() public {
         uint256 escrowId = createTestEscrow();
@@ -280,16 +347,16 @@ contract WTFEscrowTest is Test {
         vm.prank(buyer);
 
         vm.expectRevert(
-            WTFEscrow.DisputeWindowClosed.selector
+            WTFEscrow.DisputeAlreadyRaised.selector
         );
 
         escrow.raiseDispute(escrowId);
     }
 
-    
+
     // BONUS TEST 2
     // Arbitrator resolves dispute to seller
-    
+
 
     function test_ArbitratorResolvesToSeller() public {
         uint256 escrowId = createTestEscrow();
@@ -334,10 +401,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    
+
     // BONUS TEST 3
     // Cannot resolve non-disputed escrow
-    
+
 
     function test_CannotResolveNonDisputedEscrow() public {
         uint256 escrowId = createTestEscrow();
