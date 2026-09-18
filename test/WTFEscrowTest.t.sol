@@ -16,9 +16,9 @@ contract WTFEscrowTest is Test {
 
     uint256 constant ESCROW_AMOUNT = 1 ether;
 
-    // ---------------------------------------------------------
+    
     // SETUP
-    // ---------------------------------------------------------
+    
 
     function setUp() public {
         buyer = makeAddr("buyer");
@@ -34,9 +34,9 @@ contract WTFEscrowTest is Test {
         vm.deal(thirdParty, 10 ether);
     }
 
-    // ---------------------------------------------------------
+    
     // HELPER: CREATE ESCROW
-    // ---------------------------------------------------------
+    
 
     function createTestEscrow()
         internal
@@ -49,10 +49,10 @@ contract WTFEscrowTest is Test {
         }(payable(seller));
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 1
     // Buyer can raise dispute
-    // ---------------------------------------------------------
+    
 
     function test_BuyerCanRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -91,10 +91,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 2
     // Seller can raise dispute
-    // ---------------------------------------------------------
+    
 
     function test_SellerCanRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -133,10 +133,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 3
     // Third party cannot raise dispute
-    // ---------------------------------------------------------
+    
 
     function test_ThirdPartyCannotRaiseDispute() public {
         uint256 escrowId = createTestEscrow();
@@ -150,10 +150,10 @@ contract WTFEscrowTest is Test {
         escrow.raiseDispute(escrowId);
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 4
     // Dispute window closed after delivery confirmation
-    // ---------------------------------------------------------
+    
 
     function test_DisputeWindowExpiredReverts() public {
         uint256 escrowId = createTestEscrow();
@@ -181,10 +181,10 @@ contract WTFEscrowTest is Test {
         escrow.raiseDispute(escrowId);
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 5
     // Arbitrator resolves dispute to buyer
-    // ---------------------------------------------------------
+    
 
     function test_ArbitratorResolvesToBuyer() public {
         uint256 escrowId = createTestEscrow();
@@ -237,10 +237,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // TEST 6
     // Non-arbitrator cannot resolve dispute
-    // ---------------------------------------------------------
+    
 
     function test_NonArbitratorCannotResolve() public {
         uint256 escrowId = createTestEscrow();
@@ -263,10 +263,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // BONUS TEST 1
     // Cannot raise dispute twice
-    // ---------------------------------------------------------
+    
 
     function test_CannotRaiseDisputeTwice() public {
         uint256 escrowId = createTestEscrow();
@@ -286,10 +286,10 @@ contract WTFEscrowTest is Test {
         escrow.raiseDispute(escrowId);
     }
 
-    // ---------------------------------------------------------
+    
     // BONUS TEST 2
     // Arbitrator resolves dispute to seller
-    // ---------------------------------------------------------
+    
 
     function test_ArbitratorResolvesToSeller() public {
         uint256 escrowId = createTestEscrow();
@@ -334,10 +334,10 @@ contract WTFEscrowTest is Test {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // BONUS TEST 3
     // Cannot resolve non-disputed escrow
-    // ---------------------------------------------------------
+    
 
     function test_CannotResolveNonDisputedEscrow() public {
         uint256 escrowId = createTestEscrow();

@@ -4,9 +4,9 @@ pragma solidity ^0.8.20;
 
 contract WTFEscrow {
 
-    // ---------------------------------------------------------
+    
     // 1. ESCROW STATES
-    // ---------------------------------------------------------
+    
 
     enum EscrowState {
         Active,
@@ -16,9 +16,9 @@ contract WTFEscrow {
         Resolved
     }
 
-    // ---------------------------------------------------------
+    
     // 2. ESCROW DATA
-    // ---------------------------------------------------------
+    
 
     struct Escrow {
         address payable buyer;
@@ -31,9 +31,9 @@ contract WTFEscrow {
 
     uint256 public nextEscrowId;
 
-    // ---------------------------------------------------------
+    
     // 3. DISPUTE DATA
-    // ---------------------------------------------------------
+    
 
     uint256 public constant DISPUTE_WINDOW = 72 hours;
 
@@ -45,9 +45,9 @@ contract WTFEscrow {
 
     mapping(uint256 => address) public disputeInitiator;
 
-    // ---------------------------------------------------------
+    
     // 4. EVENTS
-    // ---------------------------------------------------------
+    
 
     event EscrowCreated(
         uint256 indexed escrowId,
@@ -78,9 +78,9 @@ contract WTFEscrow {
         uint256 amountReleased
     );
 
-    // ---------------------------------------------------------
+    
     // 5. CUSTOM ERRORS
-    // ---------------------------------------------------------
+    
 
     error NotPartyToEscrow();
     error DisputeWindowClosed();
@@ -94,17 +94,17 @@ contract WTFEscrow {
     error IncorrectPayment();
     error TransferFailed();
 
-    // ---------------------------------------------------------
+    
     // 6. CONSTRUCTOR
-    // ---------------------------------------------------------
+    
 
     constructor(address _arbitrator) {
         arbitrator = _arbitrator;
     }
 
-    // ---------------------------------------------------------
+    
     // 7. CREATE ESCROW
-    // ---------------------------------------------------------
+    
 
     function createEscrow(
         address payable seller
@@ -131,9 +131,9 @@ contract WTFEscrow {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // 8. CONFIRM DELIVERY
-    // ---------------------------------------------------------
+    
 
     function confirmDelivery(
         uint256 escrowId
@@ -177,9 +177,9 @@ contract WTFEscrow {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // 9. CANCEL ESCROW
-    // ---------------------------------------------------------
+    
 
     function cancelEscrow(
         uint256 escrowId
@@ -218,9 +218,9 @@ contract WTFEscrow {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // 10. RAISE DISPUTE
-    // ---------------------------------------------------------
+    
 
     function raiseDispute(
         uint256 escrowId
@@ -272,9 +272,9 @@ contract WTFEscrow {
         );
     }
 
-    // ---------------------------------------------------------
+    
     // 11. RESOLVE DISPUTE
-    // ---------------------------------------------------------
+    
 
     function resolveDispute(
         uint256 escrowId,
