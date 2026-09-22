@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+// Interface
+
+interface IFeeVault {
+    function computeFee(uint256 tradeAmount) external pure returns (uint256);
+
+    function receiveFee(uint256 escrowId) external payable;
+}
+
 contract WTFEscrow {
+    // Imports
+
+    IFeeVault public feeVault;
+
     // 1. ESCROW STATES
 
     enum EscrowState {
@@ -49,7 +61,7 @@ contract WTFEscrow {
 
     event DisputeResolved(uint256 indexed escrowId, address indexed winner, uint256 amountReleased);
 
-    event DeliveryAcknowledged( uint256 indexed escrowId,uint256 timestamp);
+    event DeliveryAcknowledged(uint256 indexed escrowId, uint256 timestamp);
 
     // 5. CUSTOM ERRORS
 
@@ -67,8 +79,9 @@ contract WTFEscrow {
 
     // 6. CONSTRUCTOR
 
-    constructor(address _arbitrator) {
+    constructor(address _arbitrator, address _feeVault) {
         arbitrator = _arbitrator;
+        feeVault = IFeeVault(_feeVault);
     }
 
     // 7. CREATE ESCROW
@@ -141,17 +154,23 @@ contract WTFEscrow {
 
         uint256 amount = e.amount;
 
+        uint256 fee = feeVault.computeFee(amount);
+        uint256 sellerAmount = amount - fee;
+
         e.state = EscrowState.Released;
         e.amount = 0;
 
-        // Release funds to seller.
-        (bool success,) = e.seller.call{value: amount}("");
+        // Send 2.5% fee to FeeVault
+        feeVault.receiveFee{value: fee}(escrowId);
+
+        // Send remaining 97.5% to seller
+        (bool success,) = e.seller.call{value: sellerAmount}("");
 
         if (!success) {
             revert TransferFailed();
         }
 
-        emit EscrowReleased(escrowId, amount);
+        emit EscrowReleased(escrowId, sellerAmount);
     }
 
     // 10. CANCEL ESCROW
