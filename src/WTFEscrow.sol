@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Interface
+// Interfaces
+
+//FeeVault
 
 interface IFeeVault {
     function computeFee(uint256 tradeAmount) external pure returns (uint256);
@@ -9,10 +11,19 @@ interface IFeeVault {
     function receiveFee(uint256 escrowId) external payable;
 }
 
+//WTFReputation
+
+interface IWTFReputation {
+    function recordSuccessfulTrade(address buyer, address seller) external;
+
+    function recordDisputeOutcome(address initiator, address respondent, address winner) external;
+}
+
 contract WTFEscrow {
     // Imports
 
     IFeeVault public feeVault;
+    IWTFReputation public reputation;
 
     // 1. ESCROW STATES
 
@@ -79,9 +90,10 @@ contract WTFEscrow {
 
     // 6. CONSTRUCTOR
 
-    constructor(address _arbitrator, address _feeVault) {
+    constructor(address _arbitrator, address _feeVault, address _reputation) {
         arbitrator = _arbitrator;
         feeVault = IFeeVault(_feeVault);
+        reputation = IWTFReputation(_reputation);
     }
 
     // 7. CREATE ESCROW
@@ -169,6 +181,8 @@ contract WTFEscrow {
         if (!success) {
             revert TransferFailed();
         }
+
+        reputation.recordSuccessfulTrade(e.buyer, e.seller);
 
         emit EscrowReleased(escrowId, sellerAmount);
     }
@@ -272,12 +286,17 @@ contract WTFEscrow {
         e.state = EscrowState.Resolved;
         e.amount = 0;
 
-        // Send funds to the winning party.
         (bool success,) = winner.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
+
+        address initiator = disputeInitiator[escrowId];
+
+        address respondent = initiator == e.buyer ? e.seller : e.buyer;
+
+        reputation.recordDisputeOutcome(initiator, respondent, winner);
 
         emit DisputeResolved(escrowId, winner, amount);
     }

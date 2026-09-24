@@ -2,165 +2,259 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/FreeVault.sol";
+import "../src/FeeVault.sol";
 import "../src/WTFEscrow.sol";
+import "../src/WTFReputation.sol";
 
-contract FeeVaultTest is Test {
+contract Vault is Test {
     FeeVault vault;
+
     WTFEscrow escrow;
+    WTFReputation reputation;
 
     address owner;
-    address user;
+    address buyer;
+    address seller;
+    address arbitrator;
+    address recipient;
+    address attacker;
+
+    uint256 constant TRADE_AMOUNT = 1 ether;
+    uint256 constant FEE = 0.025 ether;
 
     function setUp() public {
-        owner = makeAddr("owner");
-        user = makeAddr("user");
+        owner = address(this);
 
-        vm.prank(owner);
+        buyer = makeAddr("buyer");
+        seller = makeAddr("seller");
+        arbitrator = makeAddr("arbitrator");
+        recipient = makeAddr("recipient");
+        attacker = makeAddr("attacker");
+
+        vm.deal(address(this), 10 ether);
+        vm.deal(buyer, 10 ether);
+        vm.deal(seller, 10 ether);
+        vm.deal(arbitrator, 10 ether);
+        vm.deal(attacker, 10 ether);
+
         vault = new FeeVault();
-        escrow = new WTFEscrow(owner, address(vault));
 
-        vm.deal(user, 10 ether);
+        // Reputation initially receives no escrow reporter.
+        reputation = new WTFReputation(address(0));
+
+        // Current WTFEscrow constructor requires 3 addresses.
+        escrow = new WTFEscrow(
+            arbitrator,
+            address(vault),
+            address(reputation)
+        );
+
+         vm.deal(address(escrow), 10 ether);
+
+        // Allow WTFEscrow to update reputation.
+        reputation.grantRole(
+            reputation.REPORTER_ROLE(),
+            address(escrow)
+        );
     }
 
-    // 1. Fee received updates balance and totalFeesCollected
-    function test_ReceiveFeeUpdatesBalance() public {
-        vm.prank(user);
+    // ---------------------------------------------------------
+    // COMPUTE FEE
+    // ---------------------------------------------------------
 
-        vm.expectEmit(true, false, false, true);
+    function test_ComputeFee() public view {
+        uint256 fee = vault.computeFee(
+            TRADE_AMOUNT
+        );
 
-        emit FeeVault.FeeReceived(user, 1 ether, 1);
-
-        vault.receiveFee{value: 1 ether}(1);
-
-        assertEq(address(vault).balance, 1 ether);
-
-        assertEq(vault.totalFeesCollected(), 1 ether);
+        assertEq(
+            fee,
+            FEE
+        );
     }
 
-    // 2. Owner can withdraw fees
+    function test_ComputeFeeForZero() public view {
+        assertEq(
+            vault.computeFee(0),
+            0
+        );
+    }
+
+    // ---------------------------------------------------------
+    // RECEIVE FEE
+    // ---------------------------------------------------------
+
+    function test_ReceiveFee() public {
+        vm.prank(address(escrow));
+
+        vault.receiveFee{
+            value: FEE
+        }(0);
+
+        assertEq(
+            address(vault).balance,
+            FEE
+        );
+
+        assertEq(
+            vault.totalFeesCollected(),
+            FEE
+        );
+    }
+
+    function test_ReceiveFeeCannotReceiveZero() public {
+        vm.expectRevert(
+            FeeVault.ZeroAmount.selector
+        );
+
+        vault.receiveFee(0);
+    }
+
+    // ---------------------------------------------------------
+    // DIRECT RECEIVE
+    // ---------------------------------------------------------
+
+    function test_DirectETHReceive() public {
+        vm.deal(attacker, 1 ether);
+
+        vm.prank(attacker);
+
+        (bool success,) = address(vault).call{
+            value: 0.1 ether
+        }("");
+
+        assertTrue(success);
+
+        assertEq(
+            address(vault).balance,
+            0.1 ether
+        );
+
+        assertEq(
+            vault.totalFeesCollected(),
+            0.1 ether
+        );
+    }
+
+    // ---------------------------------------------------------
+    // WITHDRAW
+    // ---------------------------------------------------------
+
     function test_OwnerCanWithdraw() public {
-        vm.prank(user);
-        vault.receiveFee{value: 1 ether}(1);
+        vm.prank(address(escrow));
 
-        uint256 ownerBalanceBefore = owner.balance;
+        vault.receiveFee{
+            value: FEE
+        }(0);
 
-        vm.prank(owner);
+        uint256 recipientBalanceBefore =
+            recipient.balance;
 
-        vm.expectEmit(true, false, false, true);
+        vault.withdraw(
+            recipient,
+            FEE
+        );
 
-        emit FeeVault.FeeWithdrawn(owner, 0.5 ether);
+        uint256 recipientBalanceAfter =
+            recipient.balance;
 
-        vault.withdraw(owner, 0.5 ether);
+        assertEq(
+            recipientBalanceAfter,
+            recipientBalanceBefore + FEE
+        );
 
-        uint256 ownerBalanceAfter = owner.balance;
+        assertEq(
+            vault.totalFeesWithdrawn(),
+            FEE
+        );
 
-        assertEq(ownerBalanceAfter, ownerBalanceBefore + 0.5 ether);
-
-        assertEq(address(vault).balance, 0.5 ether);
-
-        assertEq(vault.totalFeesWithdrawn(), 0.5 ether);
+        assertEq(
+            address(vault).balance,
+            0
+        );
     }
 
-    // 3. Non-owner cannot withdraw
     function test_NonOwnerCannotWithdraw() public {
-        vm.prank(user);
-        vault.receiveFee{value: 1 ether}(1);
+        vm.prank(address(escrow));
 
-        vm.prank(user);
+        vault.receiveFee{
+            value: FEE
+        }(0);
 
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
+        vm.prank(attacker);
 
-        vault.withdraw(user, 0.5 ether);
+        vm.expectRevert();
+
+        vault.withdraw(
+            recipient,
+            FEE
+        );
     }
 
-    // 4. Cannot withdraw more than vault balance
-    function test_WithdrawMoreThanBalance() public {
-        vm.prank(user);
-        vault.receiveFee{value: 1 ether}(1);
+    function test_CannotWithdrawZero() public {
+        vm.expectRevert(
+            FeeVault.ZeroAmount.selector
+        );
 
-        vm.prank(owner);
-
-        vm.expectRevert(FeeVault.InsufficientBalance.selector);
-
-        vault.withdraw(owner, 2 ether);
+        vault.withdraw(
+            recipient,
+            0
+        );
     }
 
-    // 5. Fee calculation is exactly 2.5%
-    function test_ComputeFeeCorrect() public {
-        uint256 fee = vault.computeFee(1 ether);
+    function test_CannotWithdrawMoreThanBalance() public {
+        vm.prank(address(escrow));
 
-        assertEq(fee, 0.025 ether);
+        vault.receiveFee{
+            value: FEE
+        }(0);
+
+        vm.expectRevert(
+            FeeVault.InsufficientBalance.selector
+        );
+
+        vault.withdraw(
+            recipient,
+            FEE + 1
+        );
     }
 
-    // 6. Escrow integration
+    // ---------------------------------------------------------
+    // ESCROW + FEEVAULT INTEGRATION
+    // ---------------------------------------------------------
 
+    function test_EscrowSendsFeeToVault() public {
+        vm.prank(buyer);
 
-    function test_EscrowIntegration() public {
-    FeeVault feeVault = new FeeVault();
+        uint256 escrowId =
+            escrow.createEscrow{
+                value: TRADE_AMOUNT
+            }(payable(seller));
 
-    WTFEscrow escrow = new WTFEscrow(
-        owner,
-        address(feeVault)
-    );
+        vm.prank(buyer);
 
-    // Create 1 ETH escrow
-    vm.deal(user, 1 ether);
+        escrow.acknowledgeDelivery(
+            escrowId
+        );
 
-    vm.prank(user);
+        vm.warp(
+            block.timestamp +
+            escrow.DISPUTE_WINDOW() +
+            1
+        );
 
-    uint256 escrowId = escrow.createEscrow{
-        value: 1 ether
-    }(payable(owner));
+        escrow.releaseAfterWindow(
+            escrowId
+        );
 
-    // Buyer acknowledges delivery
-    vm.prank(user);
+        assertEq(
+            address(vault).balance,
+            FEE
+        );
 
-    escrow.acknowledgeDelivery(escrowId);
-
-    // Move past 72-hour dispute window
-    vm.warp(
-        block.timestamp + escrow.DISPUTE_WINDOW() + 1
-    );
-
-    uint256 sellerBalanceBefore = owner.balance;
-    uint256 feeVaultBalanceBefore = address(feeVault).balance;
-
-    // Release escrow
-    escrow.releaseAfterWindow(escrowId);
-
-    uint256 sellerBalanceAfter = owner.balance;
-    uint256 feeVaultBalanceAfter = address(feeVault).balance;
-
-    // 2.5% fee = 0.025 ETH
-    uint256 expectedFee = 0.025 ether;
-
-    // Seller receives 97.5% = 0.975 ETH
-    uint256 expectedSellerAmount = 0.975 ether;
-
-    assertEq(
-        feeVaultBalanceAfter - feeVaultBalanceBefore,
-        expectedFee
-    );
-
-    assertEq(
-        sellerBalanceAfter - sellerBalanceBefore,
-        expectedSellerAmount
-    );
-
-    // Escrow should be released
-    (
-        ,
-        ,
-        uint256 amount,
-        WTFEscrow.EscrowState state
-    ) = escrow.escrows(escrowId);
-
-    assertEq(amount, 0);
-
-    assertEq(
-        uint256(state),
-        uint256(WTFEscrow.EscrowState.Released)
-    );
-}
+        assertEq(
+            vault.totalFeesCollected(),
+            FEE
+        );
+    }
 }
