@@ -18,7 +18,9 @@ contract WTFReputationTest is Test {
         seller = makeAddr("seller");
         attacker = makeAddr("attacker");
 
-        reputation = new WTFReputation(escrow);
+        reputation = new WTFReputation();
+
+reputation.setReporter(escrow);
     }
 
     // 1. Successful trade
@@ -86,4 +88,15 @@ contract WTFReputationTest is Test {
 
         assertEq(reputation.getScore(seller), -20);
     }
+
+
+
+    function test_EscrowHasReporterRole() public {
+    assertTrue(
+        reputation.hasRole(
+            reputation.REPORTER_ROLE(),
+            escrow
+        )
+    );
+}
 }

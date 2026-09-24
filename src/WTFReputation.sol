@@ -26,10 +26,16 @@ contract WTFReputation is AccessControl {
 
     error NotReporter();
 
-    constructor(address escrowAddress) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(REPORTER_ROLE, escrowAddress);
-    }
+    constructor() {
+    _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+}
+
+function setReporter(address escrowAddress)
+    external
+    onlyRole(DEFAULT_ADMIN_ROLE)
+{
+    _grantRole(REPORTER_ROLE, escrowAddress);
+}
 
     function recordSuccessfulTrade(address buyer, address seller) external onlyRole(REPORTER_ROLE) {
         _update(buyer, TRADE_SUCCESS, "successful_trade");
