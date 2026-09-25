@@ -53,11 +53,10 @@ function setReporter(address escrowAddress)
 
         _update(respondent, initiatorWon ? BLAMED_LOSS : BLAMED_WIN, initiatorWon ? "blamed_lost" : "blamed_won");
 
-        if (initiatorWon) {
-            reputation[initiator].disputesWon++;
-        } else {
-            reputation[initiator].disputesLost++;
-        }
+
+        initiatorWon ? reputation[initiator].disputesWon++ : reputation[initiator].disputesLost++;
+        !initiatorWon ? reputation[respondent].disputesWon++ : reputation[respondent].disputesLost++;
+
     }
 
     function getScore(address user) external view returns (int256) {

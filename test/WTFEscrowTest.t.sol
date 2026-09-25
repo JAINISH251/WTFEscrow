@@ -405,9 +405,13 @@ contract WTFEscrowTest is Test {
 
         assertEq(
             buyerBalanceAfter,
-            buyerBalanceBefore + ESCROW_AMOUNT
+            buyerBalanceBefore + SELLER_AMOUNT
         );
 
+        assertEq(
+            address(feeVault).balance,
+            FEE
+        );
         (
             ,
             ,
@@ -456,7 +460,7 @@ contract WTFEscrowTest is Test {
 
         assertEq(
             sellerBalanceAfter,
-            sellerBalanceBefore + ESCROW_AMOUNT
+            sellerBalanceBefore + SELLER_AMOUNT
         );
 
         assertEq(

@@ -281,12 +281,23 @@ contract WTFEscrow {
             revert NotPartyToEscrow();
         }
 
+        
+
+        
+
+
         uint256 amount = e.amount;
+
+        uint256 fee = feeVault.computeFee(amount);
+        uint256 WinnerAmount = amount - fee;
 
         e.state = EscrowState.Resolved;
         e.amount = 0;
 
-        (bool success,) = winner.call{value: amount}("");
+        // Send 2.5% fee to FeeVault
+        feeVault.receiveFee{value: fee}(escrowId);
+
+        (bool success,) = winner.call{value: WinnerAmount}("");
 
         if (!success) {
             revert TransferFailed();
