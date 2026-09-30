@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 contract MilestoneEscrow {
-
     // ---------------------------------------------------------
     // 1. MILESTONE STATE
     // ---------------------------------------------------------
@@ -51,35 +50,18 @@ contract MilestoneEscrow {
     // ---------------------------------------------------------
 
     event MilestoneEscrowCreated(
-        uint256 indexed escrowId,
-        address indexed buyer,
-        address indexed seller,
-        uint256 totalAmount
+        uint256 indexed escrowId, address indexed buyer, address indexed seller, uint256 totalAmount
     );
 
-    event MilestoneReleased(
-        uint256 indexed escrowId,
-        uint256 indexed milestoneIndex,
-        uint256 amount
-    );
+    event MilestoneReleased(uint256 indexed escrowId, uint256 indexed milestoneIndex, uint256 amount);
 
-    event MilestoneDisputed(
-        uint256 indexed escrowId,
-        uint256 indexed milestoneIndex
-    );
+    event MilestoneDisputed(uint256 indexed escrowId, uint256 indexed milestoneIndex);
 
     event MilestoneResolved(
-        uint256 indexed escrowId,
-        uint256 indexed milestoneIndex,
-        address indexed winner,
-        uint256 amount
+        uint256 indexed escrowId, uint256 indexed milestoneIndex, address indexed winner, uint256 amount
     );
 
-    event ReleasedFundsClaimed(
-        uint256 indexed escrowId,
-        address indexed seller,
-        uint256 amount
-    );
+    event ReleasedFundsClaimed(uint256 indexed escrowId, address indexed seller, uint256 amount);
 
     // ---------------------------------------------------------
     // 6. CUSTOM ERRORS
@@ -89,6 +71,7 @@ contract MilestoneEscrow {
     error InvalidEscrow();
     error InvalidMilestone();
     error IncorrectPayment();
+    error InvalidAddress();
     error InvalidState();
     error MilestoneOutOfOrder();
     error NotArbitrator();
@@ -100,6 +83,9 @@ contract MilestoneEscrow {
     // ---------------------------------------------------------
 
     constructor(address _arbitrator) {
+        if (_arbitrator == address(0)) {
+            revert InvalidAddress();
+        }
         arbitrator = _arbitrator;
     }
 
@@ -107,11 +93,7 @@ contract MilestoneEscrow {
     // 8. CREATE MILESTONE ESCROW
     // ---------------------------------------------------------
 
-    function createMilestoneEscrow(
-        address seller,
-        string[] calldata descriptions,
-        uint256[] calldata amounts
-    )
+    function createMilestoneEscrow(address seller, string[] calldata descriptions, uint256[] calldata amounts)
         external
         payable
         returns (uint256 escrowId)
@@ -124,7 +106,7 @@ contract MilestoneEscrow {
             revert InvalidMilestone();
         }
 
-        uint256 totalAmount;
+        uint256 totalAmount = 0;
 
         for (uint256 i = 0; i < amounts.length; i++) {
             totalAmount += amounts[i];
@@ -143,33 +125,18 @@ contract MilestoneEscrow {
         escrow.totalAmount = totalAmount;
 
         for (uint256 i = 0; i < descriptions.length; i++) {
-            escrow.milestones.push(
-                Milestone({
-                    description: descriptions[i],
-                    amount: amounts[i],
-                    state: MilestoneState.Pending
-                })
-            );
+            escrow.milestones
+                .push(Milestone({description: descriptions[i], amount: amounts[i], state: MilestoneState.Pending}));
         }
 
-        emit MilestoneEscrowCreated(
-            escrowId,
-            msg.sender,
-            seller,
-            totalAmount
-        );
+        emit MilestoneEscrowCreated(escrowId, msg.sender, seller, totalAmount);
     }
 
     // ---------------------------------------------------------
     // 9. RELEASE MILESTONE
     // ---------------------------------------------------------
 
-    function releaseMilestone(
-        uint256 escrowId,
-        uint256 milestoneIndex
-    )
-        external
-    {
+    function releaseMilestone(uint256 escrowId, uint256 milestoneIndex) external {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -185,8 +152,7 @@ contract MilestoneEscrow {
             revert InvalidMilestone();
         }
 
-        Milestone storage milestone =
-            escrow.milestones[milestoneIndex];
+        Milestone storage milestone = escrow.milestones[milestoneIndex];
 
         if (milestone.state != MilestoneState.Pending) {
             revert InvalidState();
@@ -194,10 +160,7 @@ contract MilestoneEscrow {
 
         // Milestones must be released in order.
         if (milestoneIndex > 0) {
-            if (
-                escrow.milestones[milestoneIndex - 1].state
-                != MilestoneState.Released
-            ) {
+            if (escrow.milestones[milestoneIndex - 1].state != MilestoneState.Released) {
                 revert MilestoneOutOfOrder();
             }
         }
@@ -206,23 +169,14 @@ contract MilestoneEscrow {
 
         escrow.releasedAmount += milestone.amount;
 
-        emit MilestoneReleased(
-            escrowId,
-            milestoneIndex,
-            milestone.amount
-        );
+        emit MilestoneReleased(escrowId, milestoneIndex, milestone.amount);
     }
 
     // ---------------------------------------------------------
     // 10. DISPUTE MILESTONE
     // ---------------------------------------------------------
 
-    function disputeMilestone(
-        uint256 escrowId,
-        uint256 milestoneIndex
-    )
-        external
-    {
+    function disputeMilestone(uint256 escrowId, uint256 milestoneIndex) external {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -238,8 +192,7 @@ contract MilestoneEscrow {
             revert InvalidMilestone();
         }
 
-        Milestone storage milestone =
-            escrow.milestones[milestoneIndex];
+        Milestone storage milestone = escrow.milestones[milestoneIndex];
 
         if (milestone.state != MilestoneState.Pending) {
             revert InvalidState();
@@ -247,23 +200,17 @@ contract MilestoneEscrow {
 
         milestone.state = MilestoneState.Disputed;
 
-        emit MilestoneDisputed(
-            escrowId,
-            milestoneIndex
-        );
+        emit MilestoneDisputed(escrowId, milestoneIndex);
     }
 
     // ---------------------------------------------------------
     // 11. RESOLVE MILESTONE
     // ---------------------------------------------------------
 
-    function resolveMilestone(
-        uint256 escrowId,
-        uint256 milestoneIndex,
-        address winner
-    )
-        external
-    {
+    function resolveMilestone(uint256 escrowId, uint256 milestoneIndex, address winner) external {
+        if (winner == address(0)) {
+            revert InvalidAddress();
+        }
         if (msg.sender != arbitrator) {
             revert NotArbitrator();
         }
@@ -278,15 +225,11 @@ contract MilestoneEscrow {
             revert InvalidMilestone();
         }
 
-        if (
-            winner != escrow.buyer &&
-            winner != escrow.seller
-        ) {
+        if (winner != escrow.buyer && winner != escrow.seller) {
             revert InvalidWinner();
         }
 
-        Milestone storage milestone =
-            escrow.milestones[milestoneIndex];
+        Milestone storage milestone = escrow.milestones[milestoneIndex];
 
         if (milestone.state != MilestoneState.Disputed) {
             revert InvalidState();
@@ -300,29 +243,20 @@ contract MilestoneEscrow {
             escrow.releasedAmount += amount;
         }
 
+        emit MilestoneResolved(escrowId, milestoneIndex, winner, amount);
+
         (bool success,) = winner.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
-
-        emit MilestoneResolved(
-            escrowId,
-            milestoneIndex,
-            winner,
-            amount
-        );
     }
 
     // ---------------------------------------------------------
     // 12. CLAIM RELEASED FUNDS
     // ---------------------------------------------------------
 
-    function claimReleased(
-        uint256 escrowId
-    )
-        external
-    {
+    function claimReleased(uint256 escrowId) external {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -341,44 +275,30 @@ contract MilestoneEscrow {
 
         escrow.releasedAmount = 0;
 
+        emit ReleasedFundsClaimed(escrowId, escrow.seller, amount);
+
         (bool success,) = escrow.seller.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
-
-        emit ReleasedFundsClaimed(
-            escrowId,
-            escrow.seller,
-            amount
-        );
-    }
-   function getMilestone(
-    uint256 escrowId,
-    uint256 milestoneIndex
-)
-    external
-    view
-    returns (
-        string memory description,
-        uint256 amount,
-        MilestoneState state
-    )
-{
-    if (escrows[escrowId].buyer == address(0)) {
-        revert InvalidEscrow();
     }
 
-    if (milestoneIndex >= escrows[escrowId].milestones.length) {
-        revert InvalidMilestone();
+    function getMilestone(uint256 escrowId, uint256 milestoneIndex)
+        external
+        view
+        returns (string memory description, uint256 amount, MilestoneState state)
+    {
+        if (escrows[escrowId].buyer == address(0)) {
+            revert InvalidEscrow();
+        }
+
+        if (milestoneIndex >= escrows[escrowId].milestones.length) {
+            revert InvalidMilestone();
+        }
+
+        Milestone storage milestone = escrows[escrowId].milestones[milestoneIndex];
+
+        return (milestone.description, milestone.amount, milestone.state);
     }
-
-    Milestone storage milestone = escrows[escrowId].milestones[milestoneIndex];
-
-    return (
-        milestone.description,
-        milestone.amount,
-        milestone.state
-    );
-}
 }

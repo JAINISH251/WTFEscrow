@@ -20,7 +20,7 @@ contract WTFReputationTest is Test {
 
         reputation = new WTFReputation();
 
-reputation.setReporter(escrow);
+        reputation.setReporter(escrow);
     }
 
     // 1. Successful trade
@@ -89,14 +89,7 @@ reputation.setReporter(escrow);
         assertEq(reputation.getScore(seller), -20);
     }
 
-
-
     function test_EscrowHasReporterRole() public {
-    assertTrue(
-        reputation.hasRole(
-            reputation.REPORTER_ROLE(),
-            escrow
-        )
-    );
-}
+        assertTrue(reputation.hasRole(reputation.REPORTER_ROLE(), escrow));
+    }
 }

@@ -60,44 +60,19 @@ contract MultiPartyEscrow {
     // 5. EVENTS
     // ---------------------------------------------------------
 
-    event MultiEscrowCreated(
-        uint256 indexed escrowId,
-        address indexed creator
-    );
+    event MultiEscrowCreated(uint256 indexed escrowId, address indexed creator);
 
-    event ShareFunded(
-        uint256 indexed escrowId,
-        address indexed buyer,
-        uint256 amount
-    );
+    event ShareFunded(uint256 indexed escrowId, address indexed buyer, uint256 amount);
 
-    event DeliveryAcknowledged(
-        uint256 indexed escrowId,
-        address indexed buyer,
-        uint256 timestamp
-    );
+    event DeliveryAcknowledged(uint256 indexed escrowId, address indexed buyer, uint256 timestamp);
 
-    event DisputeRaised(
-        uint256 indexed escrowId,
-        address indexed raisedBy
-    );
+    event DisputeRaised(uint256 indexed escrowId, address indexed raisedBy);
 
-    event DisputeResolved(
-        uint256 indexed escrowId,
-        bool buyersWin
-    );
+    event DisputeResolved(uint256 indexed escrowId, bool buyersWin);
 
-    event SellerPaid(
-        uint256 indexed escrowId,
-        address indexed seller,
-        uint256 amount
-    );
+    event SellerPaid(uint256 indexed escrowId, address indexed seller, uint256 amount);
 
-    event BuyerRefunded(
-        uint256 indexed escrowId,
-        address indexed buyer,
-        uint256 amount
-    );
+    event BuyerRefunded(uint256 indexed escrowId, address indexed buyer, uint256 amount);
 
     // ---------------------------------------------------------
     // 6. CUSTOM ERRORS
@@ -130,10 +105,7 @@ contract MultiPartyEscrow {
     // 8. CREATE MULTI ESCROW
     // ---------------------------------------------------------
 
-    function createMultiEscrow(
-        PartyShare[] calldata buyers,
-        PartyShare[] calldata sellers
-    )
+    function createMultiEscrow(PartyShare[] calldata buyers, PartyShare[] calldata sellers)
         external
         returns (uint256 escrowId)
     {
@@ -171,43 +143,23 @@ contract MultiPartyEscrow {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < buyers.length; i++) {
-            escrow.buyers.push(
-                PartyShare({
-                    party: buyers[i].party,
-                    shareBPS: buyers[i].shareBPS
-                })
-            );
+            escrow.buyers.push(PartyShare({party: buyers[i].party, shareBPS: buyers[i].shareBPS}));
         }
 
         for (uint256 i = 0; i < sellers.length; i++) {
-            escrow.sellers.push(
-                PartyShare({
-                    party: sellers[i].party,
-                    shareBPS: sellers[i].shareBPS
-                })
-            );
+            escrow.sellers.push(PartyShare({party: sellers[i].party, shareBPS: sellers[i].shareBPS}));
         }
 
         escrow.state = MultiEscrowState.Funding;
 
-        emit MultiEscrowCreated(
-            escrowId,
-            msg.sender
-        );
+        emit MultiEscrowCreated(escrowId, msg.sender);
     }
 
     // ---------------------------------------------------------
     // 9. FIND BUYER SHARE
     // ---------------------------------------------------------
 
-    function _getBuyerShare(
-        uint256 escrowId,
-        address buyer
-    )
-        internal
-        view
-        returns (uint256)
-    {
+    function _getBuyerShare(uint256 escrowId, address buyer) internal view returns (uint256) {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < escrow.buyers.length; i++) {
@@ -223,14 +175,7 @@ contract MultiPartyEscrow {
     // 10. CHECK BUYER
     // ---------------------------------------------------------
 
-    function _isBuyer(
-        uint256 escrowId,
-        address buyer
-    )
-        internal
-        view
-        returns (bool)
-    {
+    function _isBuyer(uint256 escrowId, address buyer) internal view returns (bool) {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < escrow.buyers.length; i++) {
@@ -246,14 +191,7 @@ contract MultiPartyEscrow {
     // 11. CHECK SELLER
     // ---------------------------------------------------------
 
-    function _isSeller(
-        uint256 escrowId,
-        address seller
-    )
-        internal
-        view
-        returns (bool)
-    {
+    function _isSeller(uint256 escrowId, address seller) internal view returns (bool) {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < escrow.sellers.length; i++) {
@@ -269,12 +207,7 @@ contract MultiPartyEscrow {
     // 12. FUND SHARE
     // ---------------------------------------------------------
 
-    function fundShare(
-        uint256 escrowId
-    )
-        external
-        payable
-    {
+    function fundShare(uint256 escrowId) external payable {
         MultiEscrow storage escrow = escrows[escrowId];
 
         if (escrow.state != MultiEscrowState.Funding) {
@@ -289,10 +222,7 @@ contract MultiPartyEscrow {
             revert AlreadyFunded();
         }
 
-        uint256 shareBPS = _getBuyerShare(
-            escrowId,
-            msg.sender
-        );
+        uint256 shareBPS = _getBuyerShare(escrowId, msg.sender);
 
         // -----------------------------------------------------
         // First buyer establishes totalAmount.
@@ -303,20 +233,15 @@ contract MultiPartyEscrow {
                 revert IncorrectFundingAmount();
             }
 
-            escrow.totalAmount =
-                (msg.value * 10000) / shareBPS;
+            escrow.totalAmount = (msg.value * 10000) / shareBPS;
 
             // Make sure the calculation was exact.
-            if (
-                escrow.totalAmount * shareBPS
-                != msg.value * 10000
-            ) {
+            if (escrow.totalAmount * shareBPS != msg.value * 10000) {
                 revert IncorrectFundingAmount();
             }
         }
 
-        uint256 expectedAmount =
-            (escrow.totalAmount * shareBPS) / 10000;
+        uint256 expectedAmount = (escrow.totalAmount * shareBPS) / 10000;
 
         if (msg.value != expectedAmount) {
             revert IncorrectFundingAmount();
@@ -326,11 +251,7 @@ contract MultiPartyEscrow {
 
         escrow.amountFunded += msg.value;
 
-        emit ShareFunded(
-            escrowId,
-            msg.sender,
-            msg.value
-        );
+        emit ShareFunded(escrowId, msg.sender, msg.value);
 
         // -----------------------------------------------------
         // Automatically become Active when fully funded.
@@ -345,11 +266,7 @@ contract MultiPartyEscrow {
     // 13. ACKNOWLEDGE DELIVERY
     // ---------------------------------------------------------
 
-    function acknowledgeDelivery(
-        uint256 escrowId
-    )
-        external
-    {
+    function acknowledgeDelivery(uint256 escrowId) external {
         MultiEscrow storage escrow = escrows[escrowId];
 
         if (escrow.state != MultiEscrowState.Active) {
@@ -366,34 +283,21 @@ contract MultiPartyEscrow {
 
         deliveryConfirmedAt[escrowId] = block.timestamp;
 
-        emit DeliveryAcknowledged(
-            escrowId,
-            msg.sender,
-            block.timestamp
-        );
+        emit DeliveryAcknowledged(escrowId, msg.sender, block.timestamp);
     }
 
     // ---------------------------------------------------------
     // 14. RAISE DISPUTE
     // ---------------------------------------------------------
 
-    function raiseDispute(
-        uint256 escrowId
-    )
-        external
-    {
+    function raiseDispute(uint256 escrowId) external {
         MultiEscrow storage escrow = escrows[escrowId];
 
-        if (
-            !_isBuyer(escrowId, msg.sender)
-            && !_isSeller(escrowId, msg.sender)
-        ) {
+        if (!_isBuyer(escrowId, msg.sender) && !_isSeller(escrowId, msg.sender)) {
             revert NotPartyToEscrow();
         }
 
-        if (
-            escrow.state != MultiEscrowState.Active
-        ) {
+        if (escrow.state != MultiEscrowState.Active) {
             revert InvalidState();
         }
 
@@ -404,11 +308,7 @@ contract MultiPartyEscrow {
         // If delivery has been acknowledged,
         // enforce the 72-hour window.
         if (deliveryConfirmedAt[escrowId] != 0) {
-            if (
-                block.timestamp >
-                deliveryConfirmedAt[escrowId]
-                + DISPUTE_WINDOW
-            ) {
+            if (block.timestamp > deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
                 revert DisputeWindowClosed();
             }
         }
@@ -417,40 +317,27 @@ contract MultiPartyEscrow {
 
         escrow.state = MultiEscrowState.Disputed;
 
-        emit DisputeRaised(
-            escrowId,
-            msg.sender
-        );
+        emit DisputeRaised(escrowId, msg.sender);
     }
 
     // ---------------------------------------------------------
     // 15. RESOLVE DISPUTE
     // ---------------------------------------------------------
 
-    function resolveDispute(
-        uint256 escrowId,
-        bool buyersWin
-    )
-        external
-    {
+    function resolveDispute(uint256 escrowId, bool buyersWin) external {
         if (msg.sender != arbitrator) {
             revert NotArbitrator();
         }
 
         MultiEscrow storage escrow = escrows[escrowId];
 
-        if (
-            escrow.state != MultiEscrowState.Disputed
-        ) {
+        if (escrow.state != MultiEscrowState.Disputed) {
             revert InvalidState();
         }
 
         escrow.state = MultiEscrowState.Resolved;
 
-        emit DisputeResolved(
-            escrowId,
-            buyersWin
-        );
+        emit DisputeResolved(escrowId, buyersWin);
 
         if (buyersWin) {
             _refundBuyers(escrowId);
@@ -463,34 +350,21 @@ contract MultiPartyEscrow {
     // 16. REFUND BUYERS
     // ---------------------------------------------------------
 
-    function _refundBuyers(
-        uint256 escrowId
-    )
-        internal
-    {
+    function _refundBuyers(uint256 escrowId) internal {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < escrow.buyers.length; i++) {
-            address buyer =
-                escrow.buyers[i].party;
+            address buyer = escrow.buyers[i].party;
 
-            uint256 amount =
-                (escrow.totalAmount
-                    * escrow.buyers[i].shareBPS)
-                    / 10000;
+            uint256 amount = (escrow.totalAmount * escrow.buyers[i].shareBPS) / 10000;
 
-            (bool success,) =
-                payable(buyer).call{value: amount}("");
+            (bool success,) = payable(buyer).call{value: amount}("");
 
             if (!success) {
                 revert TransferFailed();
             }
 
-            emit BuyerRefunded(
-                escrowId,
-                buyer,
-                amount
-            );
+            emit BuyerRefunded(escrowId, buyer, amount);
         }
     }
 
@@ -498,34 +372,21 @@ contract MultiPartyEscrow {
     // 17. PAY SELLERS
     // ---------------------------------------------------------
 
-    function _paySellers(
-        uint256 escrowId
-    )
-        internal
-    {
+    function _paySellers(uint256 escrowId) internal {
         MultiEscrow storage escrow = escrows[escrowId];
 
         for (uint256 i = 0; i < escrow.sellers.length; i++) {
-            address seller =
-                escrow.sellers[i].party;
+            address seller = escrow.sellers[i].party;
 
-            uint256 amount =
-                (escrow.totalAmount
-                    * escrow.sellers[i].shareBPS)
-                    / 10000;
+            uint256 amount = (escrow.totalAmount * escrow.sellers[i].shareBPS) / 10000;
 
-            (bool success,) =
-                payable(seller).call{value: amount}("");
+            (bool success,) = payable(seller).call{value: amount}("");
 
             if (!success) {
                 revert TransferFailed();
             }
 
-            emit SellerPaid(
-                escrowId,
-                seller,
-                amount
-            );
+            emit SellerPaid(escrowId, seller, amount);
         }
     }
 
@@ -533,11 +394,7 @@ contract MultiPartyEscrow {
     // 18. RELEASE TO SELLERS
     // ---------------------------------------------------------
 
-    function releaseToSellers(
-        uint256 escrowId
-    )
-        external
-    {
+    function releaseToSellers(uint256 escrowId) external {
         MultiEscrow storage escrow = escrows[escrowId];
 
         if (escrow.state != MultiEscrowState.Active) {
@@ -548,11 +405,7 @@ contract MultiPartyEscrow {
             revert InvalidState();
         }
 
-        if (
-            block.timestamp <
-            deliveryConfirmedAt[escrowId]
-            + DISPUTE_WINDOW
-        ) {
+        if (block.timestamp < deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
             revert DisputeWindowClosed();
         }
 

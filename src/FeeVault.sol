@@ -30,7 +30,9 @@ contract FeeVault is Ownable, ReentrancyGuard {
         emit FeeReceived(msg.sender, msg.value, escrowId);
     }
 
-    function withdraw(address to, uint256 amount) external onlyOwner nonReentrant {
+    function withdraw(address to, uint256 amount) external nonReentrant onlyOwner {
+        require(to != address(0), "Zero address");
+
         if (amount == 0) {
             revert ZeroAmount();
         }
@@ -41,13 +43,13 @@ contract FeeVault is Ownable, ReentrancyGuard {
 
         totalFeesWithdrawn += amount;
 
+        emit FeeWithdrawn(to, amount);
+
         (bool ok,) = to.call{value: amount}("");
 
         if (!ok) {
             revert TransferFailed();
         }
-
-        emit FeeWithdrawn(to, amount);
     }
 
     function computeFee(uint256 tradeAmount) external pure returns (uint256) {

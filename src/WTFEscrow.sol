@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Interfaces
+// Imports
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+// Interfaces
 //FeeVault
 
 interface IFeeVault {
@@ -19,11 +22,17 @@ interface IWTFReputation {
     function recordDisputeOutcome(address initiator, address respondent, address winner) external;
 }
 
-contract WTFEscrow {
-    // Imports
+contract WTFEscrow is Ownable {
+    // Interface address
 
     IFeeVault public feeVault;
     IWTFReputation public reputation;
+
+    //External Contract address
+    address public ondoTokenAddress;
+
+    //  Internal Contract Address
+    address public arbitrator;
 
     // 1. ESCROW STATES
 
@@ -48,11 +57,22 @@ contract WTFEscrow {
 
     uint256 public nextEscrowId;
 
+    // RWA DATA
+
+    struct RWAPosition {
+        address user;
+        uint256 amount;
+        address tokenAddress;
+        bool open;
+    }
+
+    mapping(bytes32 => RWAPosition) public rwaPositions;
+
     // 3. DISPUTE DATA
 
     uint256 public constant DISPUTE_WINDOW = 72 hours;
 
-    address public arbitrator;
+    //   Mappings
 
     mapping(uint256 => uint256) public deliveryConfirmedAt;
 
@@ -74,6 +94,14 @@ contract WTFEscrow {
 
     event DeliveryAcknowledged(uint256 indexed escrowId, uint256 timestamp);
 
+    //RWA EVENT
+
+    event RWAPositionOpened(address indexed user, uint256 amount, address tokenAddress, bytes32 positionId);
+
+    event RWAPositionClosed(
+        address indexed user, uint256 amount, address tokenAddress, bytes32 positionId, uint256 yield
+    );
+
     // 5. CUSTOM ERRORS
 
     error NotPartyToEscrow();
@@ -82,18 +110,40 @@ contract WTFEscrow {
     error NotArbitrator();
     error EscrowNotDisputed();
 
+    // External Contract errors
+    error InvalidTokenAddress();
+
     // Existing contract errors
+
     error InvalidEscrow();
+    error InvalidAddress();
     error InvalidState();
     error IncorrectPayment();
     error TransferFailed();
+    error AmountNotBeZero();
+
+    error RWAPositionNotFound();
+    error NotRWAPositionOwner();
 
     // 6. CONSTRUCTOR
 
-    constructor(address _arbitrator, address _feeVault, address _reputation) {
+    constructor(address _arbitrator, address _feeVault, address _reputation) Ownable(msg.sender) {
+        if (_arbitrator == address(0) || _feeVault == address(0) || _reputation == address(0)) {
+            revert InvalidAddress();
+        }
         arbitrator = _arbitrator;
         feeVault = IFeeVault(_feeVault);
         reputation = IWTFReputation(_reputation);
+    }
+
+    // Assign OndoToken address by owner only
+
+    function setOndoTokenAddress(address _ondoTokenAddress) external onlyOwner {
+        if (_ondoTokenAddress == address(0)) {
+            revert InvalidTokenAddress();
+        }
+
+        ondoTokenAddress = _ondoTokenAddress;
     }
 
     // 7. CREATE ESCROW
@@ -154,6 +204,7 @@ contract WTFEscrow {
         }
 
         // 72 hours must have passed.
+        // slither-disable-next-line timestamp
         if (block.timestamp < deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
             revert DisputeWindowClosed();
         }
@@ -172,10 +223,14 @@ contract WTFEscrow {
         e.state = EscrowState.Released;
         e.amount = 0;
 
+        emit EscrowReleased(escrowId, sellerAmount);
+
         // Send 2.5% fee to FeeVault
+        // slither-disable-next-line arbitrary-send-eth
         feeVault.receiveFee{value: fee}(escrowId);
 
         // Send remaining 97.5% to seller
+        // slither-disable-next-line arbitrary-send-eth
         (bool success,) = e.seller.call{value: sellerAmount}("");
 
         if (!success) {
@@ -183,8 +238,6 @@ contract WTFEscrow {
         }
 
         reputation.recordSuccessfulTrade(e.buyer, e.seller);
-
-        emit EscrowReleased(escrowId, sellerAmount);
     }
 
     // 10. CANCEL ESCROW
@@ -210,14 +263,15 @@ contract WTFEscrow {
         e.state = EscrowState.Refunded;
         e.amount = 0;
 
+        emit EscrowRefunded(escrowId, amount);
+
         // Refund buyer.
+        // slither-disable-next-line arbitrary-send-eth
         (bool success,) = e.buyer.call{value: amount}("");
 
         if (!success) {
             revert TransferFailed();
         }
-
-        emit EscrowRefunded(escrowId, amount);
     }
 
     // // 11. RAISE DISPUTE
@@ -247,6 +301,7 @@ contract WTFEscrow {
         // If delivery has been confirmed,
         // enforce the 72-hour dispute window.
         if (deliveryConfirmedAt[escrowId] != 0) {
+            // slither-disable-next-line timestamp
             if (block.timestamp > deliveryConfirmedAt[escrowId] + DISPUTE_WINDOW) {
                 revert DisputeWindowClosed();
             }
@@ -265,6 +320,7 @@ contract WTFEscrow {
 
     function resolveDispute(uint256 escrowId, address winner) external {
         // Only arbitrator can resolve disputes.
+        if (winner == address(0)) revert InvalidAddress();
         if (msg.sender != arbitrator) {
             revert NotArbitrator();
         }
@@ -281,11 +337,6 @@ contract WTFEscrow {
             revert NotPartyToEscrow();
         }
 
-        
-
-        
-
-
         uint256 amount = e.amount;
 
         uint256 fee = feeVault.computeFee(amount);
@@ -294,21 +345,62 @@ contract WTFEscrow {
         e.state = EscrowState.Resolved;
         e.amount = 0;
 
+        address initiator = disputeInitiator[escrowId];
+
+        address respondent = initiator == e.buyer ? e.seller : e.buyer;
+
+        emit DisputeResolved(escrowId, winner, amount);
+
         // Send 2.5% fee to FeeVault
         feeVault.receiveFee{value: fee}(escrowId);
 
+        // slither-disable-next-line arbitrary-send-eth
         (bool success,) = winner.call{value: WinnerAmount}("");
 
         if (!success) {
             revert TransferFailed();
         }
 
-        address initiator = disputeInitiator[escrowId];
-
-        address respondent = initiator == e.buyer ? e.seller : e.buyer;
-
         reputation.recordDisputeOutcome(initiator, respondent, winner);
+    }
 
-        emit DisputeResolved(escrowId, winner, amount);
+    //  RWA POSITIONS FUNCTION
+
+    function openRWAPosition(uint256 amount, bytes32 positionId) external {
+        if (amount == 0) {
+            revert AmountNotBeZero();
+        }
+
+        if (rwaPositions[positionId].user != address(0)) {
+            revert InvalidState();
+        }
+
+        rwaPositions[positionId] =
+            RWAPosition({user: msg.sender, amount: amount, tokenAddress: ondoTokenAddress, open: true});
+
+        emit RWAPositionOpened(msg.sender, amount, ondoTokenAddress, positionId);
+    }
+
+    function closeRWAPosition(bytes32 positionId, uint256 yield) external {
+        RWAPosition storage position = rwaPositions[positionId];
+
+        // Position must exist and still be open.
+        if (position.user == address(0) || !position.open) {
+            revert RWAPositionNotFound();
+        }
+
+        // Only the user who opened the position can close it.
+        if (msg.sender != position.user) {
+            revert NotRWAPositionOwner();
+        }
+
+        uint256 amount = position.amount;
+        address tokenAddress = position.tokenAddress;
+
+        // Mark position as closed.
+        position.open = false;
+
+        emit RWAPositionClosed(msg.sender, amount, tokenAddress, positionId, yield);
     }
 }
+

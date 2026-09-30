@@ -44,18 +44,12 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         assertEq(escrowId, 0);
 
-        (
-            address storedBuyer,
-            address storedSeller,
-            uint256 storedTotalAmount,
-            uint256 releasedAmount
-        ) = milestoneEscrow.escrows(escrowId);
+        (address storedBuyer, address storedSeller, uint256 storedTotalAmount, uint256 releasedAmount) =
+            milestoneEscrow.escrows(escrowId);
 
         assertEq(storedBuyer, buyer);
         assertEq(storedSeller, seller);
@@ -66,32 +60,20 @@ contract MilestoneEscrowTest is Test {
         assertEq(address(milestoneEscrow).balance, totalAmount);
 
         // Check first milestone.
-        (
-            string memory description0,
-            uint256 amount0,
-            MilestoneEscrow.MilestoneState state0
-        ) = milestoneEscrow.getMilestone(escrowId, 0);
+        (string memory description0, uint256 amount0, MilestoneEscrow.MilestoneState state0) =
+            milestoneEscrow.getMilestone(escrowId, 0);
 
         assertEq(description0, "Design");
         assertEq(amount0, milestone1);
-        assertEq(
-            uint256(state0),
-            uint256(MilestoneEscrow.MilestoneState.Pending)
-        );
+        assertEq(uint256(state0), uint256(MilestoneEscrow.MilestoneState.Pending));
 
         // Check second milestone.
-        (
-            string memory description1,
-            uint256 amount1,
-            MilestoneEscrow.MilestoneState state1
-        ) = milestoneEscrow.getMilestone(escrowId, 1);
+        (string memory description1, uint256 amount1, MilestoneEscrow.MilestoneState state1) =
+            milestoneEscrow.getMilestone(escrowId, 1);
 
         assertEq(description1, "Development");
         assertEq(amount1, milestone2);
-        assertEq(
-            uint256(state1),
-            uint256(MilestoneEscrow.MilestoneState.Pending)
-        );
+        assertEq(uint256(state1), uint256(MilestoneEscrow.MilestoneState.Pending));
     }
 
     // ---------------------------------------------------------
@@ -105,9 +87,7 @@ contract MilestoneEscrowTest is Test {
 
         vm.expectRevert(MilestoneEscrow.IncorrectPayment.selector);
 
-        milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount - 1
-        }(seller, descriptions, amounts);
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount - 1}(seller, descriptions, amounts);
     }
 
     // ---------------------------------------------------------
@@ -119,35 +99,22 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         vm.prank(buyer);
 
         milestoneEscrow.releaseMilestone(escrowId, 0);
 
-        (
-            string memory description,
-            uint256 amount,
-            MilestoneEscrow.MilestoneState state
-        ) = milestoneEscrow.getMilestone(escrowId, 0);
+        (string memory description, uint256 amount, MilestoneEscrow.MilestoneState state) =
+            milestoneEscrow.getMilestone(escrowId, 0);
 
         assertEq(description, "Design");
         assertEq(amount, milestone1);
 
-        assertEq(
-            uint256(state),
-            uint256(MilestoneEscrow.MilestoneState.Released)
-        );
+        assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Released));
 
         // releasedAmount should track released milestone funds.
-        (
-            ,
-            ,
-            ,
-            uint256 releasedAmount
-        ) = milestoneEscrow.escrows(escrowId);
+        (,,, uint256 releasedAmount) = milestoneEscrow.escrows(escrowId);
 
         assertEq(releasedAmount, milestone1);
     }
@@ -161,9 +128,7 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         // Try to release milestone 1 before milestone 0.
         vm.prank(buyer);
@@ -182,31 +147,19 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         vm.expectEmit(true, true, false, false);
 
-        emit MilestoneEscrow.MilestoneDisputed(
-            escrowId,
-            0
-        );
+        emit MilestoneEscrow.MilestoneDisputed(escrowId, 0);
 
         vm.prank(seller);
 
         milestoneEscrow.disputeMilestone(escrowId, 0);
 
-        (
-            ,
-            ,
-            MilestoneEscrow.MilestoneState state
-        ) = milestoneEscrow.getMilestone(escrowId, 0);
+        (,, MilestoneEscrow.MilestoneState state) = milestoneEscrow.getMilestone(escrowId, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(MilestoneEscrow.MilestoneState.Disputed)
-        );
+        assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Disputed));
     }
 
     // ---------------------------------------------------------
@@ -218,9 +171,7 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         // Seller disputes milestone 0.
         vm.prank(seller);
@@ -232,29 +183,15 @@ contract MilestoneEscrowTest is Test {
         // Arbitrator resolves in favor of seller.
         vm.prank(arbitrator);
 
-        milestoneEscrow.resolveMilestone(
-            escrowId,
-            0,
-            seller
-        );
+        milestoneEscrow.resolveMilestone(escrowId, 0, seller);
 
         uint256 sellerBalanceAfter = seller.balance;
 
-        assertEq(
-            sellerBalanceAfter - sellerBalanceBefore,
-            milestone1
-        );
+        assertEq(sellerBalanceAfter - sellerBalanceBefore, milestone1);
 
-        (
-            ,
-            ,
-            MilestoneEscrow.MilestoneState state
-        ) = milestoneEscrow.getMilestone(escrowId, 0);
+        (,, MilestoneEscrow.MilestoneState state) = milestoneEscrow.getMilestone(escrowId, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(MilestoneEscrow.MilestoneState.Resolved)
-        );
+        assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Resolved));
     }
 
     // ---------------------------------------------------------
@@ -266,9 +203,7 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         // Buyer releases milestone 0.
         vm.prank(buyer);
@@ -289,18 +224,10 @@ contract MilestoneEscrowTest is Test {
 
         uint256 sellerBalanceAfter = seller.balance;
 
-        assertEq(
-            sellerBalanceAfter - sellerBalanceBefore,
-            totalAmount
-        );
+        assertEq(sellerBalanceAfter - sellerBalanceBefore, totalAmount);
 
         // Released amount should now be zero.
-        (
-            ,
-            ,
-            ,
-            uint256 releasedAmount
-        ) = milestoneEscrow.escrows(escrowId);
+        (,,, uint256 releasedAmount) = milestoneEscrow.escrows(escrowId);
 
         assertEq(releasedAmount, 0);
     }
@@ -314,9 +241,7 @@ contract MilestoneEscrowTest is Test {
 
         vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{
-            value: totalAmount
-        }(seller, descriptions, amounts);
+        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
 
         // Stranger tries to release milestone.
         vm.prank(stranger);

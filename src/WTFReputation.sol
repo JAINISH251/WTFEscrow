@@ -27,15 +27,12 @@ contract WTFReputation is AccessControl {
     error NotReporter();
 
     constructor() {
-    _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-}
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
 
-function setReporter(address escrowAddress)
-    external
-    onlyRole(DEFAULT_ADMIN_ROLE)
-{
-    _grantRole(REPORTER_ROLE, escrowAddress);
-}
+    function setReporter(address escrowAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(REPORTER_ROLE, escrowAddress);
+    }
 
     function recordSuccessfulTrade(address buyer, address seller) external onlyRole(REPORTER_ROLE) {
         _update(buyer, TRADE_SUCCESS, "successful_trade");
@@ -53,10 +50,8 @@ function setReporter(address escrowAddress)
 
         _update(respondent, initiatorWon ? BLAMED_LOSS : BLAMED_WIN, initiatorWon ? "blamed_lost" : "blamed_won");
 
-
         initiatorWon ? reputation[initiator].disputesWon++ : reputation[initiator].disputesLost++;
         !initiatorWon ? reputation[respondent].disputesWon++ : reputation[respondent].disputesLost++;
-
     }
 
     function getScore(address user) external view returns (int256) {
