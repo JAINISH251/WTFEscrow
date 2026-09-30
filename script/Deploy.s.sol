@@ -33,11 +33,7 @@ contract Deploy is Script {
         reputation = new WTFReputation();
 
         // 3. Deploy main WTFEscrow
-        escrow = new WTFEscrow(
-            deployer,
-            address(feeVault),
-            address(reputation)
-        );
+        escrow = new WTFEscrow(deployer, address(feeVault), address(reputation));
 
         // 4. Authorize WTFEscrow as reputation reporter
         reputation.setReporter(address(escrow));

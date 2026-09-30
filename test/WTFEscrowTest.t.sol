@@ -39,33 +39,21 @@ contract WTFEscrowTest is Test {
         reputation = new WTFReputation(address(0));
 
         // Deploy Escrow with FeeVault + Reputation.
-        escrow = new WTFEscrow(
-            arbitrator,
-            address(feeVault),
-            address(reputation)
-        );
+        escrow = new WTFEscrow(arbitrator, address(feeVault), address(reputation));
 
         // Give the actual escrow contract permission
         // to update reputation.
-        reputation.grantRole(
-            reputation.REPORTER_ROLE(),
-            address(escrow)
-        );
+        reputation.grantRole(reputation.REPORTER_ROLE(), address(escrow));
     }
 
     // ---------------------------------------------------------
     // HELPER
     // ---------------------------------------------------------
 
-    function createTestEscrow()
-        internal
-        returns (uint256 escrowId)
-    {
+    function createTestEscrow() internal returns (uint256 escrowId) {
         vm.prank(buyer);
 
-        escrowId = escrow.createEscrow{
-            value: ESCROW_AMOUNT
-        }(payable(seller));
+        escrowId = escrow.createEscrow{value: ESCROW_AMOUNT}(payable(seller));
     }
 
     function acknowledgeTestDelivery(uint256 escrowId) internal {
@@ -80,21 +68,14 @@ contract WTFEscrowTest is Test {
     function test_CreateEscrow() public {
         uint256 escrowId = createTestEscrow();
 
-        (
-            address escrowBuyer,
-            address escrowSeller,
-            uint256 amount,
-            WTFEscrow.EscrowState state
-        ) = escrow.escrows(escrowId);
+        (address escrowBuyer, address escrowSeller, uint256 amount, WTFEscrow.EscrowState state) =
+            escrow.escrows(escrowId);
 
         assertEq(escrowBuyer, buyer);
         assertEq(escrowSeller, seller);
         assertEq(amount, ESCROW_AMOUNT);
 
-        assertEq(
-            uint256(state),
-            uint256(WTFEscrow.EscrowState.Active)
-        );
+        assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Active));
     }
 
     // ---------------------------------------------------------
@@ -108,10 +89,7 @@ contract WTFEscrowTest is Test {
 
         escrow.acknowledgeDelivery(escrowId);
 
-        assertGt(
-            escrow.deliveryConfirmedAt(escrowId),
-            0
-        );
+        assertGt(escrow.deliveryConfirmedAt(escrowId), 0);
     }
 
     function test_NonBuyerCannotAcknowledgeDelivery() public {
@@ -119,9 +97,7 @@ contract WTFEscrowTest is Test {
 
         vm.prank(seller);
 
-        vm.expectRevert(
-            WTFEscrow.NotPartyToEscrow.selector
-        );
+        vm.expectRevert(WTFEscrow.NotPartyToEscrow.selector);
 
         escrow.acknowledgeDelivery(escrowId);
     }
@@ -133,9 +109,7 @@ contract WTFEscrowTest is Test {
 
         vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.InvalidState.selector
-        );
+        vm.expectRevert(WTFEscrow.InvalidState.selector);
 
         escrow.acknowledgeDelivery(escrowId);
     }
@@ -149,11 +123,7 @@ contract WTFEscrowTest is Test {
 
         acknowledgeTestDelivery(escrowId);
 
-        vm.warp(
-            block.timestamp +
-            escrow.DISPUTE_WINDOW() +
-            1
-        );
+        vm.warp(block.timestamp + escrow.DISPUTE_WINDOW() + 1);
 
         uint256 sellerBalanceBefore = seller.balance;
 
@@ -162,42 +132,22 @@ contract WTFEscrowTest is Test {
         uint256 sellerBalanceAfter = seller.balance;
 
         // Seller receives 97.5%.
-        assertEq(
-            sellerBalanceAfter,
-            sellerBalanceBefore + SELLER_AMOUNT
-        );
+        assertEq(sellerBalanceAfter, sellerBalanceBefore + SELLER_AMOUNT);
 
         // FeeVault receives 2.5%.
-        assertEq(
-            address(feeVault).balance,
-            FEE
-        );
+        assertEq(address(feeVault).balance, FEE);
 
         // Escrow amount becomes zero.
-        (
-            ,
-            ,
-            uint256 amount,
-            WTFEscrow.EscrowState state
-        ) = escrow.escrows(escrowId);
+        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(WTFEscrow.EscrowState.Released)
-        );
+        assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Released));
 
         // Successful trade updates reputation.
-        assertEq(
-            reputation.getScore(buyer),
-            10
-        );
+        assertEq(reputation.getScore(buyer), 10);
 
-        assertEq(
-            reputation.getScore(seller),
-            10
-        );
+        assertEq(reputation.getScore(seller), 10);
     }
 
     function test_CannotReleaseBefore72Hours() public {
@@ -207,9 +157,7 @@ contract WTFEscrowTest is Test {
 
         vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.DisputeWindowClosed.selector
-        );
+        vm.expectRevert(WTFEscrow.DisputeWindowClosed.selector);
 
         escrow.releaseAfterWindow(escrowId);
     }
@@ -217,9 +165,7 @@ contract WTFEscrowTest is Test {
     function test_CannotReleaseWithoutAcknowledgement() public {
         uint256 escrowId = createTestEscrow();
 
-        vm.expectRevert(
-            WTFEscrow.InvalidState.selector
-        );
+        vm.expectRevert(WTFEscrow.InvalidState.selector);
 
         escrow.releaseAfterWindow(escrowId);
     }
@@ -239,24 +185,13 @@ contract WTFEscrowTest is Test {
 
         uint256 buyerBalanceAfter = buyer.balance;
 
-        assertEq(
-            buyerBalanceAfter,
-            buyerBalanceBefore + ESCROW_AMOUNT
-        );
+        assertEq(buyerBalanceAfter, buyerBalanceBefore + ESCROW_AMOUNT);
 
-        (
-            ,
-            ,
-            uint256 amount,
-            WTFEscrow.EscrowState state
-        ) = escrow.escrows(escrowId);
+        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(WTFEscrow.EscrowState.Refunded)
-        );
+        assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Refunded));
     }
 
     // ---------------------------------------------------------
@@ -270,26 +205,13 @@ contract WTFEscrowTest is Test {
 
         escrow.raiseDispute(escrowId);
 
-        (
-            ,
-            ,
-            ,
-            WTFEscrow.EscrowState state
-        ) = escrow.escrows(escrowId);
+        (,,, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
 
-        assertEq(
-            uint256(state),
-            uint256(WTFEscrow.EscrowState.Disputed)
-        );
+        assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Disputed));
 
-        assertTrue(
-            escrow.disputeRaised(escrowId)
-        );
+        assertTrue(escrow.disputeRaised(escrowId));
 
-        assertEq(
-            escrow.disputeInitiator(escrowId),
-            buyer
-        );
+        assertEq(escrow.disputeInitiator(escrowId), buyer);
     }
 
     function test_SellerCanRaiseDispute() public {
@@ -299,14 +221,9 @@ contract WTFEscrowTest is Test {
 
         escrow.raiseDispute(escrowId);
 
-        assertTrue(
-            escrow.disputeRaised(escrowId)
-        );
+        assertTrue(escrow.disputeRaised(escrowId));
 
-        assertEq(
-            escrow.disputeInitiator(escrowId),
-            seller
-        );
+        assertEq(escrow.disputeInitiator(escrowId), seller);
     }
 
     function test_ThirdPartyCannotRaiseDispute() public {
@@ -314,9 +231,7 @@ contract WTFEscrowTest is Test {
 
         vm.prank(thirdParty);
 
-        vm.expectRevert(
-            WTFEscrow.NotPartyToEscrow.selector
-        );
+        vm.expectRevert(WTFEscrow.NotPartyToEscrow.selector);
 
         escrow.raiseDispute(escrowId);
     }
@@ -330,9 +245,7 @@ contract WTFEscrowTest is Test {
 
         vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.DisputeAlreadyRaised.selector
-        );
+        vm.expectRevert(WTFEscrow.DisputeAlreadyRaised.selector);
 
         escrow.raiseDispute(escrowId);
     }
@@ -342,17 +255,11 @@ contract WTFEscrowTest is Test {
 
         acknowledgeTestDelivery(escrowId);
 
-        vm.warp(
-            block.timestamp +
-            escrow.DISPUTE_WINDOW() +
-            1
-        );
+        vm.warp(block.timestamp + escrow.DISPUTE_WINDOW() + 1);
 
         vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.DisputeWindowClosed.selector
-        );
+        vm.expectRevert(WTFEscrow.DisputeWindowClosed.selector);
 
         escrow.raiseDispute(escrowId);
     }
@@ -362,23 +269,15 @@ contract WTFEscrowTest is Test {
 
         acknowledgeTestDelivery(escrowId);
 
-        vm.warp(
-            block.timestamp +
-            70 hours
-        );
+        vm.warp(block.timestamp + 70 hours);
 
         vm.prank(buyer);
 
         escrow.raiseDispute(escrowId);
 
-        assertTrue(
-            escrow.disputeRaised(escrowId)
-        );
+        assertTrue(escrow.disputeRaised(escrowId));
 
-        assertEq(
-            escrow.disputeInitiator(escrowId),
-            buyer
-        );
+        assertEq(escrow.disputeInitiator(escrowId), buyer);
     }
 
     // ---------------------------------------------------------
@@ -396,48 +295,25 @@ contract WTFEscrowTest is Test {
 
         vm.prank(arbitrator);
 
-        escrow.resolveDispute(
-            escrowId,
-            buyer
-        );
+        escrow.resolveDispute(escrowId, buyer);
 
         uint256 buyerBalanceAfter = buyer.balance;
 
-        assertEq(
-            buyerBalanceAfter,
-            buyerBalanceBefore + SELLER_AMOUNT
-        );
+        assertEq(buyerBalanceAfter, buyerBalanceBefore + SELLER_AMOUNT);
 
-        assertEq(
-            address(feeVault).balance,
-            FEE
-        );
-        (
-            ,
-            ,
-            uint256 amount,
-            WTFEscrow.EscrowState state
-        ) = escrow.escrows(escrowId);
+        assertEq(address(feeVault).balance, FEE);
+        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(WTFEscrow.EscrowState.Resolved)
-        );
+        assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Resolved));
 
         // Buyer won dispute:
         // initiator = buyer -> +5
         // respondent = seller -> -20
-        assertEq(
-            reputation.getScore(buyer),
-            5
-        );
+        assertEq(reputation.getScore(buyer), 5);
 
-        assertEq(
-            reputation.getScore(seller),
-            -20
-        );
+        assertEq(reputation.getScore(seller), -20);
     }
 
     function test_ArbitratorResolvesDisputeToSeller() public {
@@ -451,27 +327,15 @@ contract WTFEscrowTest is Test {
 
         vm.prank(arbitrator);
 
-        escrow.resolveDispute(
-            escrowId,
-            seller
-        );
+        escrow.resolveDispute(escrowId, seller);
 
         uint256 sellerBalanceAfter = seller.balance;
 
-        assertEq(
-            sellerBalanceAfter,
-            sellerBalanceBefore + SELLER_AMOUNT
-        );
+        assertEq(sellerBalanceAfter, sellerBalanceBefore + SELLER_AMOUNT);
 
-        assertEq(
-            reputation.getScore(buyer),
-            -15
-        );
+        assertEq(reputation.getScore(buyer), -15);
 
-        assertEq(
-            reputation.getScore(seller),
-            5
-        );
+        assertEq(reputation.getScore(seller), 5);
     }
 
     function test_NonArbitratorCannotResolve() public {
@@ -483,14 +347,9 @@ contract WTFEscrowTest is Test {
 
         vm.prank(buyer);
 
-        vm.expectRevert(
-            WTFEscrow.NotArbitrator.selector
-        );
+        vm.expectRevert(WTFEscrow.NotArbitrator.selector);
 
-        escrow.resolveDispute(
-            escrowId,
-            buyer
-        );
+        escrow.resolveDispute(escrowId, buyer);
     }
 
     // ---------------------------------------------------------
@@ -502,14 +361,9 @@ contract WTFEscrowTest is Test {
 
         vm.prank(arbitrator);
 
-        vm.expectRevert(
-            WTFEscrow.EscrowNotDisputed.selector
-        );
+        vm.expectRevert(WTFEscrow.EscrowNotDisputed.selector);
 
-        escrow.resolveDispute(
-            escrowId,
-            buyer
-        );
+        escrow.resolveDispute(escrowId, buyer);
     }
 
     // ---------------------------------------------------------
@@ -517,11 +371,80 @@ contract WTFEscrowTest is Test {
     // ---------------------------------------------------------
 
     function test_ReputationReporterRoleGrantedToEscrow() public {
-        assertTrue(
-            reputation.hasRole(
-                reputation.REPORTER_ROLE(),
-                address(escrow)
-            )
-        );
+        assertTrue(reputation.hasRole(reputation.REPORTER_ROLE(), address(escrow)));
+    }
+
+    // ---------------------------------------------------------
+    // RWA POSITION TEST
+    // ---------------------------------------------------------
+
+    function testOpenRWAPosition() public {
+        uint256 amount = 1000;
+        bytes32 positionId = keccak256("position-1");
+        address fakeOndoToken = makeAddr("OndoToken");
+
+        vm.prank(address(this));
+        escrow.setOndoTokenAddress(fakeOndoToken);
+
+        vm.expectEmit(true, false, false, true);
+        emit WTFEscrow.RWAPositionOpened(buyer, amount, fakeOndoToken, positionId);
+        vm.prank(buyer);
+        escrow.openRWAPosition(amount, positionId);
+
+        (address user, uint256 storedAmount, address tokenAddress, bool open) = escrow.rwaPositions(positionId);
+
+        assertEq(user, buyer);
+        assertEq(storedAmount, amount);
+        assertEq(tokenAddress, fakeOndoToken);
+        assertTrue(open);
+    }
+
+    function testOpenRWAPositionWithZeroAmountReverts() public {
+        address fakeOndoToken = makeAddr("OndoToken");
+        bytes32 positionId = keccak256("position-zero");
+
+        vm.prank(address(this));
+        escrow.setOndoTokenAddress(fakeOndoToken);
+
+        vm.prank(buyer);
+        vm.expectRevert(WTFEscrow.AmountNotBeZero.selector);
+        escrow.openRWAPosition(0, positionId);
+    }
+
+    function testCloseRWAPosition() public {
+        uint256 amount = 1000;
+        uint256 yield = 50;
+        bytes32 positionId = keccak256("position-close");
+        address fakeOndoToken = makeAddr("OndoToken");
+
+        // Owner configures the token address.
+        vm.prank(address(this));
+        escrow.setOndoTokenAddress(fakeOndoToken);
+
+        // Buyer opens the position.
+        vm.prank(buyer);
+        escrow.openRWAPosition(amount, positionId);
+        vm.expectEmit(true, false, false, true);
+        emit WTFEscrow.RWAPositionClosed(buyer, amount, fakeOndoToken, positionId, yield);
+
+        // Buyer closes the position.
+        vm.prank(buyer);
+        escrow.closeRWAPosition(positionId, yield);
+
+        (address user, uint256 storedAmount, address tokenAddress, bool open) = escrow.rwaPositions(positionId);
+
+        assertEq(user, buyer);
+        assertEq(storedAmount, amount);
+        assertEq(tokenAddress, fakeOndoToken);
+        assertFalse(open);
+    }
+
+    function testCloseNonExistentRWAPositionReverts() public {
+        bytes32 positionId = keccak256("does-not-exist");
+
+        vm.prank(buyer);
+
+        vm.expectRevert(WTFEscrow.RWAPositionNotFound.selector);
+        escrow.closeRWAPosition(positionId, 50);
     }
 }

@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -38,36 +37,19 @@ contract MultiPartyEscrowTest is Test {
     // ---------------------------------------------------------
 
     function _createEscrow() internal returns (uint256 escrowId) {
-        MultiPartyEscrow.PartyShare[] memory buyers =
-            new MultiPartyEscrow.PartyShare[](2);
+        MultiPartyEscrow.PartyShare[] memory buyers = new MultiPartyEscrow.PartyShare[](2);
 
-        buyers[0] = MultiPartyEscrow.PartyShare({
-            party: buyer1,
-            shareBPS: 6000
-        });
+        buyers[0] = MultiPartyEscrow.PartyShare({party: buyer1, shareBPS: 6000});
 
-        buyers[1] = MultiPartyEscrow.PartyShare({
-            party: buyer2,
-            shareBPS: 4000
-        });
+        buyers[1] = MultiPartyEscrow.PartyShare({party: buyer2, shareBPS: 4000});
 
-        MultiPartyEscrow.PartyShare[] memory sellers =
-            new MultiPartyEscrow.PartyShare[](2);
+        MultiPartyEscrow.PartyShare[] memory sellers = new MultiPartyEscrow.PartyShare[](2);
 
-        sellers[0] = MultiPartyEscrow.PartyShare({
-            party: seller1,
-            shareBPS: 7000
-        });
+        sellers[0] = MultiPartyEscrow.PartyShare({party: seller1, shareBPS: 7000});
 
-        sellers[1] = MultiPartyEscrow.PartyShare({
-            party: seller2,
-            shareBPS: 3000
-        });
+        sellers[1] = MultiPartyEscrow.PartyShare({party: seller2, shareBPS: 3000});
 
-        escrowId = multiEscrow.createMultiEscrow(
-            buyers,
-            sellers
-        );
+        escrowId = multiEscrow.createMultiEscrow(buyers, sellers);
     }
 
     function _fundEscrow(uint256 escrowId) internal {
@@ -87,19 +69,13 @@ contract MultiPartyEscrowTest is Test {
     function test_CreateMultiEscrow() public {
         uint256 escrowId = _createEscrow();
 
-        (
-            uint256 totalAmount,
-            uint256 amountFunded,
-            MultiPartyEscrow.MultiEscrowState state
-        ) = multiEscrow.escrows(escrowId);
+        (uint256 totalAmount, uint256 amountFunded, MultiPartyEscrow.MultiEscrowState state) =
+            multiEscrow.escrows(escrowId);
 
         assertEq(totalAmount, 0);
         assertEq(amountFunded, 0);
 
-        assertEq(
-            uint256(state),
-            uint256(MultiPartyEscrow.MultiEscrowState.Funding)
-        );
+        assertEq(uint256(state), uint256(MultiPartyEscrow.MultiEscrowState.Funding));
 
         assertEq(multiEscrow.nextEscrowId(), 1);
     }
@@ -109,36 +85,20 @@ contract MultiPartyEscrowTest is Test {
     // ---------------------------------------------------------
 
     function test_BuyerSharesMustSum10000() public {
-        MultiPartyEscrow.PartyShare[] memory buyers =
-            new MultiPartyEscrow.PartyShare[](2);
+        MultiPartyEscrow.PartyShare[] memory buyers = new MultiPartyEscrow.PartyShare[](2);
 
-        buyers[0] = MultiPartyEscrow.PartyShare({
-            party: buyer1,
-            shareBPS: 6000
-        });
+        buyers[0] = MultiPartyEscrow.PartyShare({party: buyer1, shareBPS: 6000});
 
         // 6000 + 3000 = 9000, not 10000.
-        buyers[1] = MultiPartyEscrow.PartyShare({
-            party: buyer2,
-            shareBPS: 3000
-        });
+        buyers[1] = MultiPartyEscrow.PartyShare({party: buyer2, shareBPS: 3000});
 
-        MultiPartyEscrow.PartyShare[] memory sellers =
-            new MultiPartyEscrow.PartyShare[](1);
+        MultiPartyEscrow.PartyShare[] memory sellers = new MultiPartyEscrow.PartyShare[](1);
 
-        sellers[0] = MultiPartyEscrow.PartyShare({
-            party: seller1,
-            shareBPS: 10000
-        });
+        sellers[0] = MultiPartyEscrow.PartyShare({party: seller1, shareBPS: 10000});
 
-        vm.expectRevert(
-            MultiPartyEscrow.InvalidShares.selector
-        );
+        vm.expectRevert(MultiPartyEscrow.InvalidShares.selector);
 
-        multiEscrow.createMultiEscrow(
-            buyers,
-            sellers
-        );
+        multiEscrow.createMultiEscrow(buyers, sellers);
     }
 
     // ---------------------------------------------------------
@@ -149,19 +109,13 @@ contract MultiPartyEscrowTest is Test {
         uint256 escrowId = _createEscrow();
 
         // Initially Funding.
-        (
-            uint256 totalAmountBefore,
-            uint256 amountFundedBefore,
-            MultiPartyEscrow.MultiEscrowState stateBefore
-        ) = multiEscrow.escrows(escrowId);
+        (uint256 totalAmountBefore, uint256 amountFundedBefore, MultiPartyEscrow.MultiEscrowState stateBefore) =
+            multiEscrow.escrows(escrowId);
 
         assertEq(totalAmountBefore, 0);
         assertEq(amountFundedBefore, 0);
 
-        assertEq(
-            uint256(stateBefore),
-            uint256(MultiPartyEscrow.MultiEscrowState.Funding)
-        );
+        assertEq(uint256(stateBefore), uint256(MultiPartyEscrow.MultiEscrowState.Funding));
 
         // Buyer 1 funds 60%.
         vm.prank(buyer1);
@@ -176,36 +130,23 @@ contract MultiPartyEscrowTest is Test {
         assertEq(totalAmountAfterFirst, TOTAL_AMOUNT);
         assertEq(amountFundedAfterFirst, 6 ether);
 
-        assertEq(
-            uint256(stateAfterFirst),
-            uint256(MultiPartyEscrow.MultiEscrowState.Funding)
-        );
+        assertEq(uint256(stateAfterFirst), uint256(MultiPartyEscrow.MultiEscrowState.Funding));
 
         // Buyer 2 funds remaining 40%.
         vm.prank(buyer2);
         multiEscrow.fundShare{value: 4 ether}(escrowId);
 
-        (
-            uint256 totalAmount,
-            uint256 amountFunded,
-            MultiPartyEscrow.MultiEscrowState state
-        ) = multiEscrow.escrows(escrowId);
+        (uint256 totalAmount, uint256 amountFunded, MultiPartyEscrow.MultiEscrowState state) =
+            multiEscrow.escrows(escrowId);
 
         assertEq(totalAmount, TOTAL_AMOUNT);
         assertEq(amountFunded, TOTAL_AMOUNT);
 
-        assertEq(
-            uint256(state),
-            uint256(MultiPartyEscrow.MultiEscrowState.Active)
-        );
+        assertEq(uint256(state), uint256(MultiPartyEscrow.MultiEscrowState.Active));
 
-        assertTrue(
-            multiEscrow.hasFunded(escrowId, buyer1)
-        );
+        assertTrue(multiEscrow.hasFunded(escrowId, buyer1));
 
-        assertTrue(
-            multiEscrow.hasFunded(escrowId, buyer2)
-        );
+        assertTrue(multiEscrow.hasFunded(escrowId, buyer2));
     }
 
     // ---------------------------------------------------------
@@ -219,9 +160,7 @@ contract MultiPartyEscrowTest is Test {
         // Sends only 5 ETH.
         vm.prank(buyer1);
 
-        vm.expectRevert(
-            MultiPartyEscrow.IncorrectFundingAmount.selector
-        );
+        vm.expectRevert(MultiPartyEscrow.IncorrectFundingAmount.selector);
 
         multiEscrow.fundShare{value: 5 ether}(escrowId);
     }
@@ -240,10 +179,7 @@ contract MultiPartyEscrowTest is Test {
         multiEscrow.acknowledgeDelivery(escrowId);
 
         // Move forward 72 hours.
-        vm.warp(
-            block.timestamp
-                + multiEscrow.DISPUTE_WINDOW()
-        );
+        vm.warp(block.timestamp + multiEscrow.DISPUTE_WINDOW());
 
         uint256 seller1Before = seller1.balance;
         uint256 seller2Before = seller2.balance;
@@ -251,36 +187,22 @@ contract MultiPartyEscrowTest is Test {
         multiEscrow.releaseToSellers(escrowId);
 
         // Seller 1 = 70%.
-        uint256 expectedSeller1 =
-            (TOTAL_AMOUNT * 7000) / 10000;
+        uint256 expectedSeller1 = (TOTAL_AMOUNT * 7000) / 10000;
 
         // Seller 2 = 30%.
-        uint256 expectedSeller2 =
-            (TOTAL_AMOUNT * 3000) / 10000;
+        uint256 expectedSeller2 = (TOTAL_AMOUNT * 3000) / 10000;
 
-        assertEq(
-            seller1.balance,
-            seller1Before + expectedSeller1
-        );
+        assertEq(seller1.balance, seller1Before + expectedSeller1);
 
-        assertEq(
-            seller2.balance,
-            seller2Before + expectedSeller2
-        );
+        assertEq(seller2.balance, seller2Before + expectedSeller2);
 
-        (
-            uint256 totalAmount,
-            uint256 amountFunded,
-            MultiPartyEscrow.MultiEscrowState state
-        ) = multiEscrow.escrows(escrowId);
+        (uint256 totalAmount, uint256 amountFunded, MultiPartyEscrow.MultiEscrowState state) =
+            multiEscrow.escrows(escrowId);
 
         assertEq(totalAmount, TOTAL_AMOUNT);
         assertEq(amountFunded, TOTAL_AMOUNT);
 
-        assertEq(
-            uint256(state),
-            uint256(MultiPartyEscrow.MultiEscrowState.Released)
-        );
+        assertEq(uint256(state), uint256(MultiPartyEscrow.MultiEscrowState.Released));
     }
 
     // ---------------------------------------------------------
@@ -296,56 +218,32 @@ contract MultiPartyEscrowTest is Test {
         vm.prank(buyer1);
         multiEscrow.raiseDispute(escrowId);
 
-        (
-            uint256 totalAmount,
-            uint256 amountFunded,
-            MultiPartyEscrow.MultiEscrowState state
-        ) = multiEscrow.escrows(escrowId);
+        (uint256 totalAmount, uint256 amountFunded, MultiPartyEscrow.MultiEscrowState state) =
+            multiEscrow.escrows(escrowId);
 
         assertEq(totalAmount, TOTAL_AMOUNT);
         assertEq(amountFunded, TOTAL_AMOUNT);
 
-        assertEq(
-            uint256(state),
-            uint256(MultiPartyEscrow.MultiEscrowState.Disputed)
-        );
+        assertEq(uint256(state), uint256(MultiPartyEscrow.MultiEscrowState.Disputed));
 
         uint256 buyer1Before = buyer1.balance;
         uint256 buyer2Before = buyer2.balance;
 
         // Arbitrator decides buyers win.
         vm.prank(arbitrator);
-        multiEscrow.resolveDispute(
-            escrowId,
-            true
-        );
+        multiEscrow.resolveDispute(escrowId, true);
 
-        uint256 expectedBuyer1 =
-            (TOTAL_AMOUNT * 6000) / 10000;
+        uint256 expectedBuyer1 = (TOTAL_AMOUNT * 6000) / 10000;
 
-        uint256 expectedBuyer2 =
-            (TOTAL_AMOUNT * 4000) / 10000;
+        uint256 expectedBuyer2 = (TOTAL_AMOUNT * 4000) / 10000;
 
-        assertEq(
-            buyer1.balance,
-            buyer1Before + expectedBuyer1
-        );
+        assertEq(buyer1.balance, buyer1Before + expectedBuyer1);
 
-        assertEq(
-            buyer2.balance,
-            buyer2Before + expectedBuyer2
-        );
+        assertEq(buyer2.balance, buyer2Before + expectedBuyer2);
 
-        (
-            ,
-            ,
-            MultiPartyEscrow.MultiEscrowState finalState
-        ) = multiEscrow.escrows(escrowId);
+        (,, MultiPartyEscrow.MultiEscrowState finalState) = multiEscrow.escrows(escrowId);
 
-        assertEq(
-            uint256(finalState),
-            uint256(MultiPartyEscrow.MultiEscrowState.Resolved)
-        );
+        assertEq(uint256(finalState), uint256(MultiPartyEscrow.MultiEscrowState.Resolved));
     }
 
     // ---------------------------------------------------------
@@ -361,53 +259,28 @@ contract MultiPartyEscrowTest is Test {
         vm.prank(seller1);
         multiEscrow.raiseDispute(escrowId);
 
-        (
-            ,
-            ,
-            MultiPartyEscrow.MultiEscrowState disputedState
-        ) = multiEscrow.escrows(escrowId);
+        (,, MultiPartyEscrow.MultiEscrowState disputedState) = multiEscrow.escrows(escrowId);
 
-        assertEq(
-            uint256(disputedState),
-            uint256(MultiPartyEscrow.MultiEscrowState.Disputed)
-        );
+        assertEq(uint256(disputedState), uint256(MultiPartyEscrow.MultiEscrowState.Disputed));
 
         uint256 seller1Before = seller1.balance;
         uint256 seller2Before = seller2.balance;
 
         // Arbitrator decides sellers win.
         vm.prank(arbitrator);
-        multiEscrow.resolveDispute(
-            escrowId,
-            false
-        );
+        multiEscrow.resolveDispute(escrowId, false);
 
-        uint256 expectedSeller1 =
-            (TOTAL_AMOUNT * 7000) / 10000;
+        uint256 expectedSeller1 = (TOTAL_AMOUNT * 7000) / 10000;
 
-        uint256 expectedSeller2 =
-            (TOTAL_AMOUNT * 3000) / 10000;
+        uint256 expectedSeller2 = (TOTAL_AMOUNT * 3000) / 10000;
 
-        assertEq(
-            seller1.balance,
-            seller1Before + expectedSeller1
-        );
+        assertEq(seller1.balance, seller1Before + expectedSeller1);
 
-        assertEq(
-            seller2.balance,
-            seller2Before + expectedSeller2
-        );
+        assertEq(seller2.balance, seller2Before + expectedSeller2);
 
-        (
-            ,
-            ,
-            MultiPartyEscrow.MultiEscrowState finalState
-        ) = multiEscrow.escrows(escrowId);
+        (,, MultiPartyEscrow.MultiEscrowState finalState) = multiEscrow.escrows(escrowId);
 
-        assertEq(
-            uint256(finalState),
-            uint256(MultiPartyEscrow.MultiEscrowState.Resolved)
-        );
+        assertEq(uint256(finalState), uint256(MultiPartyEscrow.MultiEscrowState.Resolved));
     }
 
     // ---------------------------------------------------------
@@ -421,9 +294,7 @@ contract MultiPartyEscrowTest is Test {
 
         vm.prank(nonParty);
 
-        vm.expectRevert(
-            MultiPartyEscrow.NotPartyToEscrow.selector
-        );
+        vm.expectRevert(MultiPartyEscrow.NotPartyToEscrow.selector);
 
         multiEscrow.raiseDispute(escrowId);
     }
