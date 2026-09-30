@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20 ; 
+pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -15,392 +15,346 @@ contract MockWTFToken is ERC20 {
 }
 
 contract WTFStakingTest is Test {
-
     MockWTFToken public wtfToken;
-    WTFStaking public staking; 
+    WTFStaking public staking;
 
     address public user = makeAddr("user");
     address public employer = makeAddr("employer");
     address public nonOwner = makeAddr("nonOwner");
 
-    function setUp() public{
-
+    function setUp() public {
         wtfToken = new MockWTFToken();
         staking = new WTFStaking(address(wtfToken));
 
-        wtfToken.mint(user , 1000 * 1e18) ;
+        wtfToken.mint(user, 1000 * 1e18);
     }
 
     function testStake() public {
-    uint256 amount = 200 * 1e18;
+        uint256 amount = 200 * 1e18;
 
-    vm.startPrank(user);
+        vm.startPrank(user);
 
-    wtfToken.approve(address(staking), amount);
+        wtfToken.approve(address(staking), amount);
 
-    vm.expectEmit(true, false, false, true);
-    
-    emit WTFStaking.UserStaked(
-        user,
-        amount,
-        block.timestamp
-    );
+        vm.expectEmit(true, false, false, true);
 
-    staking.stake(amount);
+        emit WTFStaking.UserStaked(user, amount, block.timestamp);
 
-    vm.stopPrank();
+        staking.stake(amount);
 
-    (
-        uint256 storedAmount,
-        uint256 stakedAt,
-        uint256 lastClaimedAt,
-        bool active
-    ) = staking.userStakes(user);
+        vm.stopPrank();
 
-    assertEq(storedAmount, amount);
-    assertEq(stakedAt, lastClaimedAt);
-    assertTrue(active);
+        (uint256 storedAmount, uint256 stakedAt, uint256 lastClaimedAt, bool active) = staking.userStakes(user);
 
-    assertEq(staking.totalUserStaked(), amount);
-    assertEq(wtfToken.balanceOf(address(staking)), amount);
-}
+        assertEq(storedAmount, amount);
+        assertEq(stakedAt, lastClaimedAt);
+        assertTrue(active);
 
-function testStakeBelowMinimumReverts() public {
-    uint256 amount = 99 * 1e18;
+        assertEq(staking.totalUserStaked(), amount);
+        assertEq(wtfToken.balanceOf(address(staking)), amount);
+    }
 
-    vm.prank(user);
+    function testStakeBelowMinimumReverts() public {
+        uint256 amount = 99 * 1e18;
 
-    vm.expectRevert(WTFStaking.StakeTooSmall.selector);
-    staking.stake(amount);
-}
-function testStakeAlreadyActiveReverts() public {
-    uint256 amount = 200 * 1e18;
+        vm.prank(user);
 
-    vm.startPrank(user);
+        vm.expectRevert(WTFStaking.StakeTooSmall.selector);
+        staking.stake(amount);
+    }
 
-    wtfToken.approve(address(staking), amount);
+    function testStakeAlreadyActiveReverts() public {
+        uint256 amount = 200 * 1e18;
 
-    staking.stake(amount);
+        vm.startPrank(user);
 
-    vm.expectRevert(WTFStaking.AlreadyStaking.selector);
-    staking.stake(amount);
+        wtfToken.approve(address(staking), amount);
 
-    vm.stopPrank();
-}
+        staking.stake(amount);
 
-function testClaimReward() public {
-    uint256 stakeAmount = 1000 * 1e18;
+        vm.expectRevert(WTFStaking.AlreadyStaking.selector);
+        staking.stake(amount);
 
-    vm.startPrank(user);
+        vm.stopPrank();
+    }
 
-    wtfToken.approve(address(staking), stakeAmount);
-    staking.stake(stakeAmount);
+    function testClaimReward() public {
+        uint256 stakeAmount = 1000 * 1e18;
 
-    vm.stopPrank();
+        vm.startPrank(user);
 
-    // Fund the reward pool.
-    wtfToken.mint(address(staking), 100 * 1e18);
+        wtfToken.approve(address(staking), stakeAmount);
+        staking.stake(stakeAmount);
 
-    // Advance one year.
-    vm.warp(vm.getBlockTimestamp() + 365 days);
+        vm.stopPrank();
 
-    uint256 expectedReward = 5 * 1e18;
+        // Fund the reward pool.
+        wtfToken.mint(address(staking), 100 * 1e18);
 
-    vm.startPrank(user);
+        // Advance one year.
+        vm.warp(vm.getBlockTimestamp() + 365 days);
 
-    vm.expectEmit(true, false, false, true);
-    emit WTFStaking.UserRewardClaimed(
-        user,
-        expectedReward,
-        block.timestamp
-    );
+        uint256 expectedReward = 5 * 1e18;
 
-    staking.claimReward();
+        vm.startPrank(user);
 
-    vm.stopPrank();
+        vm.expectEmit(true, false, false, true);
+        emit WTFStaking.UserRewardClaimed(user, expectedReward, block.timestamp);
 
-    assertEq(
-        wtfToken.balanceOf(user),
-        5 * 1e18 + (0) // adjust if your initial balance differs
-    );
+        staking.claimReward();
 
-    assertEq(
-        staking.calculateReward(user),
-        0
-    );
-}
+        vm.stopPrank();
 
-function testClaimRewardWithoutActiveStakeReverts() public {
-    vm.prank(user);
+        assertEq(
+            wtfToken.balanceOf(user),
+            5 * 1e18 + (0) // adjust if your initial balance differs
+        );
 
-    vm.expectRevert(WTFStaking.NoActiveStake.selector);
-    staking.claimReward();
-}
-function testUnstake() public {
-    uint256 stakeAmount = 1000 * 1e18;
+        assertEq(staking.calculateReward(user), 0);
+    }
 
-    vm.startPrank(user);
+    function testClaimRewardWithoutActiveStakeReverts() public {
+        vm.prank(user);
 
-    wtfToken.approve(address(staking), stakeAmount);
-    staking.stake(stakeAmount);
+        vm.expectRevert(WTFStaking.NoActiveStake.selector);
+        staking.claimReward();
+    }
 
-    vm.stopPrank();
+    function testUnstake() public {
+        uint256 stakeAmount = 1000 * 1e18;
 
-    // Fund reward pool.
-    wtfToken.mint(address(staking), 100 * 1e18);
+        vm.startPrank(user);
 
-    // Create pending reward.
-    vm.warp(block.timestamp + 365 days);
+        wtfToken.approve(address(staking), stakeAmount);
+        staking.stake(stakeAmount);
 
-    uint256 balanceBefore = wtfToken.balanceOf(user);
+        vm.stopPrank();
 
-    vm.prank(user);
-    staking.unstake();
+        // Fund reward pool.
+        wtfToken.mint(address(staking), 100 * 1e18);
 
-    uint256 expectedReward = 5 * 1e18;
+        // Create pending reward.
+        vm.warp(block.timestamp + 365 days);
 
-    assertEq(
-        wtfToken.balanceOf(user),
-        balanceBefore + stakeAmount + expectedReward
-    );
+        uint256 balanceBefore = wtfToken.balanceOf(user);
 
-    (
-        uint256 amount,
-        ,
-        ,
-        bool active
-    ) = staking.userStakes(user);
+        vm.prank(user);
+        staking.unstake();
 
-    assertEq(amount, stakeAmount);
-    assertFalse(active);
+        uint256 expectedReward = 5 * 1e18;
 
-    assertEq(staking.totalUserStaked(), 0);
-}
+        assertEq(wtfToken.balanceOf(user), balanceBefore + stakeAmount + expectedReward);
 
-function testUnstakeWithoutActiveStakeReverts() public {
-    vm.prank(user);
+        (uint256 amount,,, bool active) = staking.userStakes(user);
 
-    vm.expectRevert(WTFStaking.NoActiveStake.selector);
-    staking.unstake();
-}
+        assertEq(amount, stakeAmount);
+        assertFalse(active);
 
+        assertEq(staking.totalUserStaked(), 0);
+    }
 
+    function testUnstakeWithoutActiveStakeReverts() public {
+        vm.prank(user);
 
-function testStakeAsEmployer() public {
-    uint256 amount = 1500 * 1e18;
+        vm.expectRevert(WTFStaking.NoActiveStake.selector);
+        staking.unstake();
+    }
 
-    wtfToken.mint(employer, amount);
+    function testStakeAsEmployer() public {
+        uint256 amount = 1500 * 1e18;
 
-    vm.startPrank(employer);
+        wtfToken.mint(employer, amount);
 
-    wtfToken.approve(address(staking), amount);
+        vm.startPrank(employer);
 
-    vm.expectEmit(true, false, false, true);
-    emit WTFStaking.EmployerStaked(
-        employer,
-        amount,
-        block.timestamp
-    );
+        wtfToken.approve(address(staking), amount);
 
-    staking.stakeAsEmployer(amount);
+        vm.expectEmit(true, false, false, true);
+        emit WTFStaking.EmployerStaked(employer, amount, block.timestamp);
 
-    vm.stopPrank();
+        staking.stakeAsEmployer(amount);
 
-    (
-        uint256 storedAmount,
-        uint256 stakedAt,
-        bool active
-    ) = staking.employerStakes(employer);
+        vm.stopPrank();
 
-    assertEq(storedAmount, amount);
-    assertEq(stakedAt, block.timestamp);
-    assertTrue(active);
+        (uint256 storedAmount, uint256 stakedAt, bool active) = staking.employerStakes(employer);
 
-    assertEq(staking.totalEmployerStaked(), amount);
-    assertEq(
-        wtfToken.balanceOf(address(staking)),
-        amount
-    );
+        assertEq(storedAmount, amount);
+        assertEq(stakedAt, block.timestamp);
+        assertTrue(active);
 
-    assertTrue(staking.isEmployerActive(employer));
-}
+        assertEq(staking.totalEmployerStaked(), amount);
+        assertEq(wtfToken.balanceOf(address(staking)), amount);
 
-function testStakeAsEmployerBelowMinimumReverts() public {
-    uint256 amount = 999 * 1e18;
+        assertTrue(staking.isEmployerActive(employer));
+    }
 
-    wtfToken.mint(employer, amount);
+    function testStakeAsEmployerBelowMinimumReverts() public {
+        uint256 amount = 999 * 1e18;
 
-    vm.prank(employer);
+        wtfToken.mint(employer, amount);
 
-    vm.expectRevert(WTFStaking.EmployerStakeTooSmall.selector);
-    staking.stakeAsEmployer(amount);
-}
+        vm.prank(employer);
 
-function testStakeAsEmployerAlreadyActiveReverts() public {
-    uint256 amount = 1500 * 1e18;
+        vm.expectRevert(WTFStaking.EmployerStakeTooSmall.selector);
+        staking.stakeAsEmployer(amount);
+    }
 
-    wtfToken.mint(employer, amount);
+    function testStakeAsEmployerAlreadyActiveReverts() public {
+        uint256 amount = 1500 * 1e18;
 
-    vm.startPrank(employer);
+        wtfToken.mint(employer, amount);
 
-    wtfToken.approve(address(staking), amount);
+        vm.startPrank(employer);
 
-    staking.stakeAsEmployer(amount);
+        wtfToken.approve(address(staking), amount);
 
-    vm.expectRevert(WTFStaking.AlreadyEmployerStaking.selector);
-    staking.stakeAsEmployer(amount);
+        staking.stakeAsEmployer(amount);
 
-    vm.stopPrank();
-}
+        vm.expectRevert(WTFStaking.AlreadyEmployerStaking.selector);
+        staking.stakeAsEmployer(amount);
 
-function testUnstakeAsEmployer() public {
-    uint256 amount = 1500 * 1e18;
+        vm.stopPrank();
+    }
 
-    wtfToken.mint(employer, amount);
+    function testUnstakeAsEmployer() public {
+        uint256 amount = 1500 * 1e18;
 
-    vm.startPrank(employer);
+        wtfToken.mint(employer, amount);
 
-    wtfToken.approve(address(staking), amount);
+        vm.startPrank(employer);
 
-    staking.stakeAsEmployer(amount);
+        wtfToken.approve(address(staking), amount);
 
-    vm.stopPrank();
+        staking.stakeAsEmployer(amount);
 
-    uint256 balanceBefore = wtfToken.balanceOf(employer);
+        vm.stopPrank();
 
-    vm.expectEmit(true, false, false, true);
-    emit WTFStaking.EmployerUnstaked(
-        employer,
-        amount,
-        block.timestamp
-    );
+        uint256 balanceBefore = wtfToken.balanceOf(employer);
 
-    vm.prank(employer);
-    staking.unstakeAsEmployer();
+        vm.expectEmit(true, false, false, true);
+        emit WTFStaking.EmployerUnstaked(employer, amount, block.timestamp);
 
-    assertEq(
-        wtfToken.balanceOf(employer),
-        balanceBefore + amount
-    );
+        vm.prank(employer);
+        staking.unstakeAsEmployer();
 
-    (
-        uint256 storedAmount,
-        ,
-        bool active
-    ) = staking.employerStakes(employer);
+        assertEq(wtfToken.balanceOf(employer), balanceBefore + amount);
 
-    assertEq(storedAmount, amount);
-    assertFalse(active);
+        (uint256 storedAmount,, bool active) = staking.employerStakes(employer);
 
-    assertEq(staking.totalEmployerStaked(), 0);
-    assertFalse(staking.isEmployerActive(employer));
-}
-function testUnstakeAsEmployerWithoutActiveStakeReverts() public {
-    vm.prank(employer);
+        assertEq(storedAmount, amount);
+        assertFalse(active);
 
-    vm.expectRevert(WTFStaking.NoActiveEmployerStake.selector);
-    staking.unstakeAsEmployer();
-}
+        assertEq(staking.totalEmployerStaked(), 0);
+        assertFalse(staking.isEmployerActive(employer));
+    }
 
+    function testUnstakeAsEmployerWithoutActiveStakeReverts() public {
+        vm.prank(employer);
 
+        vm.expectRevert(WTFStaking.NoActiveEmployerStake.selector);
+        staking.unstakeAsEmployer();
+    }
 
     function testSetMinUserStake() public {
-    uint256 newMin = 250 * 1e18;
+        uint256 newMin = 250 * 1e18;
 
-    staking.setMinUserStake(newMin);
+        staking.setMinUserStake(newMin);
 
-    assertEq(staking.minUserStake(), newMin);
-}
-function testSetMinEmployerStake() public {
-    uint256 newMin = 2000 * 1e18;
+        assertEq(staking.minUserStake(), newMin);
+    }
 
-    staking.setMinEmployerStake(newMin);
+    function testSetMinEmployerStake() public {
+        uint256 newMin = 2000 * 1e18;
 
-    assertEq(staking.minEmployerStake(), newMin);
-}
-function testSetYieldBoosterBps() public {
-    uint256 newBps = 100;
+        staking.setMinEmployerStake(newMin);
 
-    staking.setYieldBoosterBps(newBps);
+        assertEq(staking.minEmployerStake(), newMin);
+    }
 
-    assertEq(staking.yieldBoosterBps(), newBps);
-}
-function testSetYieldBoosterAboveMaximumReverts() public {
-    vm.expectRevert(WTFStaking.YieldBoosterTooHigh.selector);
+    function testSetYieldBoosterBps() public {
+        uint256 newBps = 100;
 
-    staking.setYieldBoosterBps(501);
-}
-function testWithdrawRewardPool() public {
-    uint256 rewardAmount = 5000 * 1e18;
+        staking.setYieldBoosterBps(newBps);
 
-    wtfToken.mint(address(staking), rewardAmount);
+        assertEq(staking.yieldBoosterBps(), newBps);
+    }
 
-    uint256 ownerBalanceBefore = wtfToken.balanceOf(address(this));
+    function testSetYieldBoosterAboveMaximumReverts() public {
+        vm.expectRevert(WTFStaking.YieldBoosterTooHigh.selector);
 
-    staking.withdrawRewardPool(rewardAmount);
+        staking.setYieldBoosterBps(501);
+    }
 
-    assertEq(
-        wtfToken.balanceOf(address(this)),
-        ownerBalanceBefore + rewardAmount
-    );
+    function testWithdrawRewardPool() public {
+        uint256 rewardAmount = 5000 * 1e18;
 
-    assertEq(
-        wtfToken.balanceOf(address(staking)),
-        0
-    );
-}
+        wtfToken.mint(address(staking), rewardAmount);
 
-function testNonOwnerCannotSetMinUserStake() public {
-    vm.prank(nonOwner);
+        uint256 ownerBalanceBefore = wtfToken.balanceOf(address(this));
 
-    vm.expectRevert(
-        abi.encodeWithSelector(
-            Ownable.OwnableUnauthorizedAccount.selector,
-            nonOwner
-        )
-    );
+        staking.withdrawRewardPool(rewardAmount);
 
-    staking.setMinUserStake(200 * 1e18);
-}
-function testNonOwnerCannotSetMinEmployerStake() public {
-    vm.prank(nonOwner);
+        assertEq(wtfToken.balanceOf(address(this)), ownerBalanceBefore + rewardAmount);
 
-    vm.expectRevert(
-        abi.encodeWithSelector(
-            Ownable.OwnableUnauthorizedAccount.selector,
-            nonOwner
-        )
-    );
+        assertEq(wtfToken.balanceOf(address(staking)), 0);
+    }
 
-    staking.setMinEmployerStake(2000 * 1e18);
-}
-function testNonOwnerCannotSetYieldBooster() public {
-    vm.prank(nonOwner);
+    function testNonOwnerCannotSetMinUserStake() public {
+        vm.prank(nonOwner);
 
-    vm.expectRevert(
-        abi.encodeWithSelector(
-            Ownable.OwnableUnauthorizedAccount.selector,
-            nonOwner
-        )
-    );
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
 
-    staking.setYieldBoosterBps(100);
-}
-function testNonOwnerCannotWithdrawRewardPool() public {
-    uint256 rewardAmount = 5000 * 1e18;
+        staking.setMinUserStake(200 * 1e18);
+    }
 
-    wtfToken.mint(address(staking), rewardAmount);
+    function testNonOwnerCannotSetMinEmployerStake() public {
+        vm.prank(nonOwner);
 
-    vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
 
-    vm.expectRevert(
-        abi.encodeWithSelector(
-            Ownable.OwnableUnauthorizedAccount.selector,
-            nonOwner
-        )
-    );
+        staking.setMinEmployerStake(2000 * 1e18);
+    }
 
-    staking.withdrawRewardPool(rewardAmount);
-}
+    function testNonOwnerCannotSetYieldBooster() public {
+        vm.prank(nonOwner);
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+
+        staking.setYieldBoosterBps(100);
+    }
+
+    function testNonOwnerCannotWithdrawRewardPool() public {
+        uint256 rewardAmount = 5000 * 1e18;
+
+        wtfToken.mint(address(staking), rewardAmount);
+
+        vm.prank(nonOwner);
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+
+        staking.withdrawRewardPool(rewardAmount);
+    }
+
+    function testDepositRewardPool() public {
+        uint256 amount = 10000 * 1e18;
+
+        wtfToken.mint(address(this), amount);
+
+        wtfToken.approve(address(staking), amount);
+
+        staking.depositRewardPool(amount);
+
+        assertEq(wtfToken.balanceOf(address(staking)), amount);
+    }
+
+    function testNonOwnerCannotDepositRewardPool() public {
+        uint256 amount = 1000 * 1e18;
+
+        vm.prank(nonOwner);
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+
+        staking.depositRewardPool(amount);
+    }
 }
 

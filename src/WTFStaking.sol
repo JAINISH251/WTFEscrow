@@ -54,11 +54,11 @@ contract WTFStaking is Ownable {
     error AlreadyStaking();
     error TokenTransferFailed();
     error NoActiveStake();
-error NoReward();
-error EmployerStakeTooSmall();
-error AlreadyEmployerStaking();
-error NoActiveEmployerStake();
-error YieldBoosterTooHigh();
+    error NoReward();
+    error EmployerStakeTooSmall();
+    error AlreadyEmployerStaking();
+    error NoActiveEmployerStake();
+    error YieldBoosterTooHigh();
 
     constructor(address _wtfToken) Ownable(msg.sender) {
         wtfToken = IERC20(_wtfToken);
@@ -75,7 +75,7 @@ error YieldBoosterTooHigh();
             revert AlreadyStaking();
         }
 
-                userStakes[msg.sender] =
+        userStakes[msg.sender] =
             UserStake({amount: amount, stakedAt: block.timestamp, lastClaimedAt: block.timestamp, active: true});
 
         totalUserStaked += amount;
@@ -87,222 +87,173 @@ error YieldBoosterTooHigh();
         if (!success) {
             revert TokenTransferFailed();
         }
-
-
     }
 
+    function _calculateReward(address user) internal view returns (uint256) {
+        UserStake memory stakeInfo = userStakes[user];
 
-    function _calculateReward(
-    address user
-) internal view returns (uint256) {
-    UserStake memory stakeInfo = userStakes[user];
-
-    if (!stakeInfo.active) {
-        return 0;
-    }
-
-    uint256 elapsed = block.timestamp - stakeInfo.lastClaimedAt;
-
-    return (
-        stakeInfo.amount *
-        yieldBoosterBps *
-        elapsed
-    ) / (10000 * 365 days);
-}
-
-
-function calculateReward(
-    address user
-) public view returns (uint256) {
-    return _calculateReward(user);
-}
-
-
-    function claimReward() public {
-    UserStake storage stakeInfo = userStakes[msg.sender];
-
-    if (!stakeInfo.active) {
-        revert NoActiveStake();
-    }
-
-    uint256 reward = _calculateReward(msg.sender);
-
-    if (reward == 0) {
-        revert NoReward();
-    }
-
-    stakeInfo.lastClaimedAt = block.timestamp;
-
-    emit UserRewardClaimed(
-        msg.sender,
-        reward,
-        block.timestamp
-    );
-    bool success = wtfToken.transfer(msg.sender, reward);
-
-    if (!success) {
-        revert TokenTransferFailed();
-    }
-
-}
-
-function unstake() external {
-    UserStake storage stakeInfo = userStakes[msg.sender];
-
-    if (!stakeInfo.active) {
-        revert NoActiveStake();
-    }
-
-    uint256 amount = stakeInfo.amount;
-
-            emit UserUnstaked(
-        msg.sender,
-        amount,
-        block.timestamp
-    );
-
-    // Auto-claim pending reward.
-    uint256 reward = _calculateReward(msg.sender);
-
-    if (reward > 0) {
-        stakeInfo.lastClaimedAt = block.timestamp;
-
-        emit UserRewardClaimed(
-            msg.sender,
-            reward,
-            block.timestamp
-        );
-        bool rewardSuccess = wtfToken.transfer(msg.sender, reward);
-
-        if (!rewardSuccess) {
-            revert TokenTransferFailed();
+        if (!stakeInfo.active) {
+            return 0;
         }
 
+        uint256 elapsed = block.timestamp - stakeInfo.lastClaimedAt;
+
+        return (stakeInfo.amount * yieldBoosterBps * elapsed) / (10000 * 365 days);
     }
 
-
-    // Deactivate the user's stake.
-    stakeInfo.active = false;
-    totalUserStaked -= amount;
-
-
-    // Return the principal.
-    bool success = wtfToken.transfer(msg.sender, amount);
-
-    if (!success) {
-        revert TokenTransferFailed();
+    function calculateReward(address user) public view returns (uint256) {
+        return _calculateReward(user);
     }
 
-}
-// ====================
-// EMPLOYER STAKING
-// ====================
+    function claimReward() public {
+        UserStake storage stakeInfo = userStakes[msg.sender];
 
-function stakeAsEmployer(uint256 amount) external {
-    if (amount < minEmployerStake) {
-        revert EmployerStakeTooSmall();
+        if (!stakeInfo.active) {
+            revert NoActiveStake();
+        }
+
+        uint256 reward = _calculateReward(msg.sender);
+
+        if (reward == 0) {
+            revert NoReward();
+        }
+
+        stakeInfo.lastClaimedAt = block.timestamp;
+
+        emit UserRewardClaimed(msg.sender, reward, block.timestamp);
+        bool success = wtfToken.transfer(msg.sender, reward);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
     }
 
-    if (employerStakes[msg.sender].active) {
-        revert AlreadyEmployerStaking();
+    function unstake() external {
+        UserStake storage stakeInfo = userStakes[msg.sender];
+
+        if (!stakeInfo.active) {
+            revert NoActiveStake();
+        }
+
+        uint256 amount = stakeInfo.amount;
+
+        emit UserUnstaked(msg.sender, amount, block.timestamp);
+
+        // Auto-claim pending reward.
+        uint256 reward = _calculateReward(msg.sender);
+
+        if (reward > 0) {
+            stakeInfo.lastClaimedAt = block.timestamp;
+
+            emit UserRewardClaimed(msg.sender, reward, block.timestamp);
+            bool rewardSuccess = wtfToken.transfer(msg.sender, reward);
+
+            if (!rewardSuccess) {
+                revert TokenTransferFailed();
+            }
+        }
+
+        // Deactivate the user's stake.
+        stakeInfo.active = false;
+        totalUserStaked -= amount;
+
+        // Return the principal.
+        bool success = wtfToken.transfer(msg.sender, amount);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
+    }
+    // ====================
+    // EMPLOYER STAKING
+    // ====================
+
+    function stakeAsEmployer(uint256 amount) external {
+        if (amount < minEmployerStake) {
+            revert EmployerStakeTooSmall();
+        }
+
+        if (employerStakes[msg.sender].active) {
+            revert AlreadyEmployerStaking();
+        }
+
+        totalEmployerStaked += amount;
+
+        emit EmployerStaked(msg.sender, amount, block.timestamp);
+
+        employerStakes[msg.sender] = EmployerStake({amount: amount, stakedAt: block.timestamp, active: true});
+
+        bool success = wtfToken.transferFrom(msg.sender, address(this), amount);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
     }
 
-    totalEmployerStaked += amount;
+    function unstakeAsEmployer() external {
+        EmployerStake storage stakeInfo = employerStakes[msg.sender];
 
-    emit EmployerStaked(
-        msg.sender,
-        amount,
-        block.timestamp
-    );
-    
-     employerStakes[msg.sender] = EmployerStake({
-        amount: amount,
-        stakedAt: block.timestamp,
-        active: true
-    });
+        if (!stakeInfo.active) {
+            revert NoActiveEmployerStake();
+        }
 
-    bool success = wtfToken.transferFrom(
-        msg.sender,
-        address(this),
-        amount
-    );
+        uint256 amount = stakeInfo.amount;
 
-    if (!success) {
-        revert TokenTransferFailed();
+        stakeInfo.active = false;
+
+        totalEmployerStaked -= amount;
+
+        emit EmployerUnstaked(msg.sender, amount, block.timestamp);
+        bool success = wtfToken.transfer(msg.sender, amount);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
     }
 
-   
-    
-}
-
-function unstakeAsEmployer() external {
-    EmployerStake storage stakeInfo = employerStakes[msg.sender];
-
-    if (!stakeInfo.active) {
-        revert NoActiveEmployerStake();
+    function isEmployerActive(address employer) external view returns (bool) {
+        return employerStakes[employer].active;
     }
 
-    uint256 amount = stakeInfo.amount;
-
-    stakeInfo.active = false;
-
-    totalEmployerStaked -= amount;
-
-    emit EmployerUnstaked(
-        msg.sender,
-        amount,
-        block.timestamp
-    );
-    bool success = wtfToken.transfer(msg.sender, amount);
-
-    if (!success) {
-        revert TokenTransferFailed();
+    function getEmployerStake(address employer) external view returns (EmployerStake memory) {
+        return employerStakes[employer];
     }
 
-}
-
-function isEmployerActive(
-    address employer
-) external view returns (bool) {
-    return employerStakes[employer].active;
-}
-
-function getEmployerStake(
-    address employer
-) external view returns (EmployerStake memory) {
-    return employerStakes[employer];
-}
-
-
-
-
-
-function setMinUserStake(uint256 newMin) external onlyOwner {
-    minUserStake = newMin;
-}
-
-function setMinEmployerStake(uint256 newMin) external onlyOwner {
-    minEmployerStake = newMin;
-}
-
-function setYieldBoosterBps(uint256 newBps) external onlyOwner {
-    if (newBps > 500) {
-        revert YieldBoosterTooHigh();
+    function setMinUserStake(uint256 newMin) external onlyOwner {
+        minUserStake = newMin;
     }
 
-    uint256 oldBps = yieldBoosterBps;
-
-    yieldBoosterBps = newBps;
-
-    emit YieldBoosterUpdated(oldBps, newBps);
-}
-
-function withdrawRewardPool(uint256 amount) external onlyOwner {
-    bool success = wtfToken.transfer(owner(), amount);
-
-    if (!success) {
-        revert TokenTransferFailed();
+    function setMinEmployerStake(uint256 newMin) external onlyOwner {
+        minEmployerStake = newMin;
     }
-}
 
+    function setYieldBoosterBps(uint256 newBps) external onlyOwner {
+        if (newBps > 500) {
+            revert YieldBoosterTooHigh();
+        }
+
+        uint256 oldBps = yieldBoosterBps;
+
+        yieldBoosterBps = newBps;
+
+        emit YieldBoosterUpdated(oldBps, newBps);
+    }
+
+    function withdrawRewardPool(uint256 amount) external onlyOwner {
+        bool success = wtfToken.transfer(owner(), amount);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
+    }
+
+    // depositRewardPool
+
+    function depositRewardPool(uint256 amount) external onlyOwner {
+        bool success = wtfToken.transferFrom(msg.sender, address(this), amount);
+
+        if (!success) {
+            revert TokenTransferFailed();
+        }
+    }
 }
