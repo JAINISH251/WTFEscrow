@@ -6,21 +6,9 @@ pragma solidity ^0.8.20;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Interfaces
-//FeeVault
+import {IFeeVault} from "./Interfaces/IFeeVault.sol";
+import {IWTFReputation} from "./Interfaces/IWTFReputation.sol";
 
-interface IFeeVault {
-    function computeFee(uint256 tradeAmount) external pure returns (uint256);
-
-    function receiveFee(uint256 escrowId) external payable;
-}
-
-//WTFReputation
-
-interface IWTFReputation {
-    function recordSuccessfulTrade(address buyer, address seller) external;
-
-    function recordDisputeOutcome(address initiator, address respondent, address winner) external;
-}
 
 contract WTFEscrow is Ownable {
     // Interface address

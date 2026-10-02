@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IWTFReputation} from "./Interfaces/IWTFReputation.sol";
+
+
+
 contract MilestoneEscrow {
+
+    //interfaces
+
+    IWTFReputation public reputation;
+
+
     // ---------------------------------------------------------
     // 1. MILESTONE STATE
     // ---------------------------------------------------------
@@ -82,12 +92,14 @@ contract MilestoneEscrow {
     // 7. CONSTRUCTOR
     // ---------------------------------------------------------
 
-    constructor(address _arbitrator) {
-        if (_arbitrator == address(0)) {
-            revert InvalidAddress();
-        }
-        arbitrator = _arbitrator;
+   constructor(address _arbitrator, address _reputation) {
+    if (_arbitrator == address(0) || _reputation == address(0)) {
+        revert InvalidAddress();
     }
+
+    arbitrator = _arbitrator;
+    reputation = IWTFReputation(_reputation);
+}
 
     // ---------------------------------------------------------
     // 8. CREATE MILESTONE ESCROW
@@ -301,4 +313,30 @@ contract MilestoneEscrow {
 
         return (milestone.description, milestone.amount, milestone.state);
     }
+
+
+
+    // Reputation Viewing function
+
+    function getReputationScore(address user)
+    external
+    view
+    returns (int256)
+{
+    return reputation.getScore(user);
+}
+
+function getReputation(address user)
+    external
+    view
+    returns (
+        int256 score,
+        uint256 totalTrades,
+        uint256 disputesWon,
+        uint256 disputesLost,
+        uint256 lastUpdated
+    )
+{
+    return reputation.reputation(user);
+}
 }

@@ -41,7 +41,7 @@ contract Deploy is Script {
         reputation.setReporter(address(escrow));
 
         // 5. Deploy MilestoneEscrow
-        milestoneEscrow = new MilestoneEscrow(deployer);
+        milestoneEscrow = new MilestoneEscrow(deployer ,address(reputation));
 
         // 6. Deploy MultiPartyEscrow
         multiPartyEscrow = new MultiPartyEscrow(deployer);

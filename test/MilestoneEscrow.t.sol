@@ -3,9 +3,14 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/MilestoneEscrow.sol";
+import "../src/WTFReputation.sol";
+
+
 
 contract MilestoneEscrowTest is Test {
     MilestoneEscrow milestoneEscrow;
+    WTFReputation reputation;
+
 
     address buyer = address(1);
     address seller = address(2);
@@ -19,21 +24,29 @@ contract MilestoneEscrowTest is Test {
     uint256[] amounts;
 
     function setUp() public {
-        milestoneEscrow = new MilestoneEscrow(arbitrator);
+    reputation = new WTFReputation();
 
-        descriptions = new string[](2);
-        descriptions[0] = "Design";
-        descriptions[1] = "Development";
+    // address(this) is the deployer and therefore DEFAULT_ADMIN_ROLE.
+    reputation.setReporter(address(this));
 
-        amounts = new uint256[](2);
-        amounts[0] = milestone1;
-        amounts[1] = milestone2;
+    milestoneEscrow = new MilestoneEscrow(
+        arbitrator,
+        address(reputation)
+    );
 
-        vm.deal(buyer, 10 ether);
-        vm.deal(seller, 1 ether);
-        vm.deal(arbitrator, 1 ether);
-        vm.deal(stranger, 1 ether);
-    }
+    descriptions = new string[](2);
+    descriptions[0] = "Design";
+    descriptions[1] = "Development";
+
+    amounts = new uint256[](2);
+    amounts[0] = milestone1;
+    amounts[1] = milestone2;
+
+    vm.deal(buyer, 10 ether);
+    vm.deal(seller, 1 ether);
+    vm.deal(arbitrator, 1 ether);
+    vm.deal(stranger, 1 ether);
+}
 
     // ---------------------------------------------------------
     // 1. test_CreateMilestoneEscrow
@@ -250,4 +263,49 @@ contract MilestoneEscrowTest is Test {
 
         milestoneEscrow.releaseMilestone(escrowId, 0);
     }
+
+   // Reputation  functions
+
+   function testGetReputation() public  {
+
+    reputation.recordSuccessfulTrade(buyer, seller);
+
+    (
+        int256 score,
+        uint256 totalTrades,
+        uint256 disputesWon,
+        uint256 disputesLost,
+        uint256 lastUpdated
+    ) = milestoneEscrow.getReputation(buyer);
+
+    assertEq(score, 10);
+    assertEq(totalTrades, 1);
+    assertEq(disputesWon, 0);
+    assertEq(disputesLost, 0);
+    assertGt(lastUpdated, 0);
+}
+
+function testGetReputationScore() public {
+
+
+    reputation.recordSuccessfulTrade(buyer, seller);
+
+    assertEq(milestoneEscrow.getReputationScore(buyer), 10);
+    assertEq(milestoneEscrow.getReputationScore(seller), 10);
+}
+function testInitialReputationIsZero() public view {
+    (
+        int256 score,
+        uint256 totalTrades,
+        uint256 disputesWon,
+        uint256 disputesLost,
+        uint256 lastUpdated
+    ) = milestoneEscrow.getReputation(buyer);
+
+    assertEq(score, 0);
+    assertEq(totalTrades, 0);
+    assertEq(disputesWon, 0);
+    assertEq(disputesLost, 0);
+    assertEq(lastUpdated, 0);
+}
 }
