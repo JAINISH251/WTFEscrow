@@ -8,6 +8,7 @@ import "../src/WTFReputation.sol";
 import "../src/WTFEscrow.sol";
 import "../src/MilestoneEscrow.sol";
 import "../src/MultiPartyEscrow.sol";
+import "../src/WTFStaking.sol";
 
 contract Deploy is Script {
     function run()
@@ -17,7 +18,8 @@ contract Deploy is Script {
             WTFReputation reputation,
             WTFEscrow escrow,
             MilestoneEscrow milestoneEscrow,
-            MultiPartyEscrow multiPartyEscrow
+            MultiPartyEscrow multiPartyEscrow,
+            WTFStaking wtfstaking
         )
     {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -43,6 +45,11 @@ contract Deploy is Script {
 
         // 6. Deploy MultiPartyEscrow
         multiPartyEscrow = new MultiPartyEscrow(deployer);
+
+        // 7. Deploy WTFStaking
+        wtfstaking = new WTFStaking(0xe6F98e02a816c4Ec8a94db1eB723B70665d40146);
+
+
 
         vm.stopBroadcast();
     }
