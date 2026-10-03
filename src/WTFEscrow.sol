@@ -9,7 +9,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IFeeVault} from "./Interfaces/IFeeVault.sol";
 import {IWTFReputation} from "./Interfaces/IWTFReputation.sol";
 
-
 contract WTFEscrow is Ownable {
     // Interface address
 

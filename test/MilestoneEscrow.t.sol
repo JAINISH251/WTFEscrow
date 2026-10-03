@@ -5,12 +5,9 @@ import "forge-std/Test.sol";
 import "../src/MilestoneEscrow.sol";
 import "../src/WTFReputation.sol";
 
-
-
 contract MilestoneEscrowTest is Test {
     MilestoneEscrow milestoneEscrow;
     WTFReputation reputation;
-
 
     address buyer = address(1);
     address seller = address(2);
@@ -24,29 +21,27 @@ contract MilestoneEscrowTest is Test {
     uint256[] amounts;
 
     function setUp() public {
-    reputation = new WTFReputation();
+        reputation = new WTFReputation();
 
-    // address(this) is the deployer and therefore DEFAULT_ADMIN_ROLE.
-    reputation.setReporter(address(this));
+        //  is the deployer and therefore DEFAULT_ADMIN_ROLE.
 
-    milestoneEscrow = new MilestoneEscrow(
-        arbitrator,
-        address(reputation)
-    );
+        milestoneEscrow = new MilestoneEscrow(arbitrator, address(reputation));
+        
+        reputation.setReporter(address(milestoneEscrow));
 
-    descriptions = new string[](2);
-    descriptions[0] = "Design";
-    descriptions[1] = "Development";
+        descriptions = new string[](2);
+        descriptions[0] = "Design";
+        descriptions[1] = "Development";
 
-    amounts = new uint256[](2);
-    amounts[0] = milestone1;
-    amounts[1] = milestone2;
+        amounts = new uint256[](2);
+        amounts[0] = milestone1;
+        amounts[1] = milestone2;
 
-    vm.deal(buyer, 10 ether);
-    vm.deal(seller, 1 ether);
-    vm.deal(arbitrator, 1 ether);
-    vm.deal(stranger, 1 ether);
-}
+        vm.deal(buyer, 10 ether);
+        vm.deal(seller, 1 ether);
+        vm.deal(arbitrator, 1 ether);
+        vm.deal(stranger, 1 ether);
+    }
 
     // ---------------------------------------------------------
     // 1. test_CreateMilestoneEscrow
@@ -61,13 +56,19 @@ contract MilestoneEscrowTest is Test {
 
         assertEq(escrowId, 0);
 
-        (address storedBuyer, address storedSeller, uint256 storedTotalAmount, uint256 releasedAmount) =
-            milestoneEscrow.escrows(escrowId);
+        (
+    address storedBuyer,
+    address storedSeller,
+    uint256 storedTotalAmount,
+    uint256 releasedAmount,
+    bool reputationRecorded
+) = milestoneEscrow.escrows(escrowId);
 
         assertEq(storedBuyer, buyer);
         assertEq(storedSeller, seller);
         assertEq(storedTotalAmount, totalAmount);
         assertEq(releasedAmount, 0);
+        assertFalse(reputationRecorded);
 
         // ETH should be locked inside the contract.
         assertEq(address(milestoneEscrow).balance, totalAmount);
@@ -127,7 +128,7 @@ contract MilestoneEscrowTest is Test {
         assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Released));
 
         // releasedAmount should track released milestone funds.
-        (,,, uint256 releasedAmount) = milestoneEscrow.escrows(escrowId);
+        (,,, uint256 releasedAmount,) = milestoneEscrow.escrows(escrowId);
 
         assertEq(releasedAmount, milestone1);
     }
@@ -175,37 +176,126 @@ contract MilestoneEscrowTest is Test {
         assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Disputed));
     }
 
+
+
+
+
+    function testSuccessfulTradeRecordedOnlyAfterAllMilestonesReleased() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    // First milestone.
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 0);
+
+    // Not complete yet.
+    assertEq(reputation.getScore(buyer), 0);
+    assertEq(reputation.getScore(seller), 0);
+
+    // Second milestone.
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 1);
+
+    // Entire escrow is now successfully completed.
+    assertEq(reputation.getScore(buyer), 10);
+    assertEq(reputation.getScore(seller), 10);
+}
+
+function testSuccessfulTradeReputationRecordedOnlyOnce() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 0);
+
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 1);
+
+    assertEq(reputation.getScore(buyer), 10);
+    assertEq(reputation.getScore(seller), 10);
+
+    // The milestones cannot be released again because they are no longer Pending.
+    vm.prank(buyer);
+    vm.expectRevert(MilestoneEscrow.InvalidState.selector);
+    milestoneEscrow.releaseMilestone(escrowId, 1);
+
+    // Reputation remains unchanged.
+    assertEq(reputation.getScore(buyer), 10);
+    assertEq(reputation.getScore(seller), 10);
+}
+
     // ---------------------------------------------------------
     // 6. test_ArbitratorResolves
     // ---------------------------------------------------------
 
-    function test_ArbitratorResolves() public {
-        uint256 totalAmount = milestone1 + milestone2;
+function test_ArbitratorResolves() public {
+    uint256 totalAmount = milestone1 + milestone2;
 
-        vm.prank(buyer);
+    vm.prank(buyer);
 
-        uint256 escrowId = milestoneEscrow.createMilestoneEscrow{value: totalAmount}(seller, descriptions, amounts);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
 
-        // Seller disputes milestone 0.
-        vm.prank(seller);
+    // Seller disputes milestone 0.
+    vm.prank(seller);
+    milestoneEscrow.disputeMilestone(escrowId, 0);
 
-        milestoneEscrow.disputeMilestone(escrowId, 0);
+    // Arbitrator resolves in favor of seller.
+    vm.prank(arbitrator);
+    milestoneEscrow.resolveMilestone(escrowId, 0, seller);
 
-        uint256 sellerBalanceBefore = seller.balance;
+    // Seller should NOT receive the money yet.
+    // The amount should be available through claimReleased().
+    (,,, uint256 releasedAmount,) =
+        milestoneEscrow.escrows(escrowId);
 
-        // Arbitrator resolves in favor of seller.
-        vm.prank(arbitrator);
+    assertEq(releasedAmount, milestone1);
 
-        milestoneEscrow.resolveMilestone(escrowId, 0, seller);
+    // Check milestone state.
+    (,, MilestoneEscrow.MilestoneState state) =
+        milestoneEscrow.getMilestone(escrowId, 0);
 
-        uint256 sellerBalanceAfter = seller.balance;
+    assertEq(
+        uint256(state),
+        uint256(MilestoneEscrow.MilestoneState.Resolved)
+    );
 
-        assertEq(sellerBalanceAfter - sellerBalanceBefore, milestone1);
+    // Seller claims the resolved funds.
+    uint256 sellerBalanceBefore = seller.balance;
 
-        (,, MilestoneEscrow.MilestoneState state) = milestoneEscrow.getMilestone(escrowId, 0);
+    vm.prank(seller);
+    milestoneEscrow.claimReleased(escrowId);
 
-        assertEq(uint256(state), uint256(MilestoneEscrow.MilestoneState.Resolved));
-    }
+    uint256 sellerBalanceAfter = seller.balance;
+
+    assertEq(
+        sellerBalanceAfter - sellerBalanceBefore,
+        milestone1
+    );
+
+    // Funds should now be zero.
+    (,,, releasedAmount,) = milestoneEscrow.escrows(escrowId);
+
+    assertEq(releasedAmount, 0);
+}
 
     // ---------------------------------------------------------
     // 7. test_SellerClaims
@@ -240,7 +330,7 @@ contract MilestoneEscrowTest is Test {
         assertEq(sellerBalanceAfter - sellerBalanceBefore, totalAmount);
 
         // Released amount should now be zero.
-        (,,, uint256 releasedAmount) = milestoneEscrow.escrows(escrowId);
+        (,,, uint256 releasedAmount,) = milestoneEscrow.escrows(escrowId);
 
         assertEq(releasedAmount, 0);
     }
@@ -264,9 +354,167 @@ contract MilestoneEscrowTest is Test {
         milestoneEscrow.releaseMilestone(escrowId, 0);
     }
 
-   // Reputation  functions
+    // ---------------------------------------------------------
+    // 9. Reputation Integration Test
+    // ---------------------------------------------------------
 
-   function testGetReputation() public  {
+    function testDisputeResolutionUpdatesReputationForSellerWin() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    // Seller raises dispute.
+    vm.prank(seller);
+    milestoneEscrow.disputeMilestone(escrowId, 0);
+
+
+    // Arbitrator awards milestone to seller.
+    vm.prank(arbitrator);
+    milestoneEscrow.resolveMilestone(
+        escrowId,
+        0,
+        seller
+    );
+
+    // Seller initiated and won:
+    // Seller +5
+    // Buyer -20
+    assertEq(reputation.getScore(seller), 5);
+    assertEq(reputation.getScore(buyer), -20);
+}
+
+
+function testDisputeResolutionUpdatesReputationForBuyerWin() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    // Seller raises dispute.
+    vm.prank(seller);
+    milestoneEscrow.disputeMilestone(escrowId, 0);
+
+
+    // Arbitrator awards milestone to buyer.
+    vm.prank(arbitrator);
+    milestoneEscrow.resolveMilestone(
+        escrowId,
+        0,
+        buyer
+    );
+
+    // Seller initiated but lost:
+    // Seller -15
+    // Buyer +5
+    assertEq(reputation.getScore(seller), -15);
+    assertEq(reputation.getScore(buyer), 5);
+}
+
+function testResolvedMilestoneDoesNotRecordSuccessfulTrade() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    // Release milestone 0 normally.
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 0);
+
+    // Seller disputes milestone 1.
+    vm.prank(seller);
+    milestoneEscrow.disputeMilestone(escrowId, 1);
+
+    // Arbitrator gives milestone 1 to seller.
+    vm.prank(arbitrator);
+    milestoneEscrow.resolveMilestone(
+        escrowId,
+        1,
+        seller
+    );
+
+    // Dispute reputation:
+    // Seller (initiator + winner) = +5
+    // Buyer (respondent + loser)  = -20
+    assertEq(reputation.getScore(seller), 5);
+    assertEq(reputation.getScore(buyer), -20);
+
+    // If successful-trade reputation had ALSO been recorded,
+    // scores would be seller +15 and buyer -10.
+    // Therefore these values prove that +10 successful-trade
+    // reputation was NOT recorded.
+}
+
+function testReputationRecordedFlag() public {
+    uint256 totalAmount = milestone1 + milestone2;
+
+    vm.prank(buyer);
+    uint256 escrowId =
+        milestoneEscrow.createMilestoneEscrow{value: totalAmount}(
+            seller,
+            descriptions,
+            amounts
+        );
+
+    // Initially false.
+    (
+        ,
+        ,
+        ,
+        ,
+        bool recordedBefore
+    ) = milestoneEscrow.escrows(escrowId);
+
+    assertFalse(recordedBefore);
+
+    // Release both milestones.
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 0);
+
+    vm.prank(buyer);
+    milestoneEscrow.releaseMilestone(escrowId, 1);
+
+    // Now it must be true.
+    (
+        ,
+        ,
+        ,
+        ,
+        bool recordedAfter
+    ) = milestoneEscrow.escrows(escrowId);
+
+    assertTrue(recordedAfter);
+}
+
+
+function testGetReputationScore() public {
+    // Give this test contract permission to update reputation.
+    reputation.setReporter(address(this));
+
+    // Record a successful trade.
+    reputation.recordSuccessfulTrade(buyer, seller);
+
+    // Buyer and seller should each receive +10.
+    assertEq(milestoneEscrow.getReputationScore(buyer), 10);
+    assertEq(milestoneEscrow.getReputationScore(seller), 10);
+}
+function testGetReputation() public {
+    reputation.setReporter(address(this));
 
     reputation.recordSuccessfulTrade(buyer, seller);
 
@@ -284,15 +532,6 @@ contract MilestoneEscrowTest is Test {
     assertEq(disputesLost, 0);
     assertGt(lastUpdated, 0);
 }
-
-function testGetReputationScore() public {
-
-
-    reputation.recordSuccessfulTrade(buyer, seller);
-
-    assertEq(milestoneEscrow.getReputationScore(buyer), 10);
-    assertEq(milestoneEscrow.getReputationScore(seller), 10);
-}
 function testInitialReputationIsZero() public view {
     (
         int256 score,
@@ -307,5 +546,8 @@ function testInitialReputationIsZero() public view {
     assertEq(disputesWon, 0);
     assertEq(disputesLost, 0);
     assertEq(lastUpdated, 0);
+
+    assertEq(milestoneEscrow.getReputationScore(buyer), 0);
 }
+    
 }

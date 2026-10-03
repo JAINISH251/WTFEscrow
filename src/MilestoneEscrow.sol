@@ -3,14 +3,10 @@ pragma solidity ^0.8.20;
 
 import {IWTFReputation} from "./Interfaces/IWTFReputation.sol";
 
-
-
 contract MilestoneEscrow {
-
     //interfaces
 
     IWTFReputation public reputation;
-
 
     // ---------------------------------------------------------
     // 1. MILESTONE STATE
@@ -43,6 +39,7 @@ contract MilestoneEscrow {
         Milestone[] milestones;
         uint256 totalAmount;
         uint256 releasedAmount;
+        bool reputationRecorded;
     }
 
     mapping(uint256 => MilestoneEscrowData) public escrows;
@@ -92,14 +89,14 @@ contract MilestoneEscrow {
     // 7. CONSTRUCTOR
     // ---------------------------------------------------------
 
-   constructor(address _arbitrator, address _reputation) {
-    if (_arbitrator == address(0) || _reputation == address(0)) {
-        revert InvalidAddress();
-    }
+    constructor(address _arbitrator, address _reputation) {
+        if (_arbitrator == address(0) || _reputation == address(0)) {
+            revert InvalidAddress();
+        }
 
-    arbitrator = _arbitrator;
-    reputation = IWTFReputation(_reputation);
-}
+        arbitrator = _arbitrator;
+        reputation = IWTFReputation(_reputation);
+    }
 
     // ---------------------------------------------------------
     // 8. CREATE MILESTONE ESCROW
@@ -148,6 +145,30 @@ contract MilestoneEscrow {
     // 9. RELEASE MILESTONE
     // ---------------------------------------------------------
 
+
+    function _recordSuccessfulTrade(MilestoneEscrowData storage escrow) internal {
+    if (escrow.reputationRecorded) {
+        return;
+    }
+
+    for (uint256 i = 0; i < escrow.milestones.length; i++) {
+        if (escrow.milestones[i].state != MilestoneState.Released) {
+            return;
+        }
+    }
+
+    escrow.reputationRecorded = true;
+
+    reputation.recordSuccessfulTrade(
+        escrow.buyer,
+        escrow.seller
+    );
+}
+
+
+
+
+
     function releaseMilestone(uint256 escrowId, uint256 milestoneIndex) external {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
@@ -180,6 +201,8 @@ contract MilestoneEscrow {
         milestone.state = MilestoneState.Released;
 
         escrow.releasedAmount += milestone.amount;
+
+        _recordSuccessfulTrade(escrow);
 
         emit MilestoneReleased(escrowId, milestoneIndex, milestone.amount);
     }
@@ -252,16 +275,31 @@ contract MilestoneEscrow {
         uint256 amount = milestone.amount;
 
         if (winner == escrow.seller) {
+            // Seller will receive the funds through claimReleased().
             escrow.releasedAmount += amount;
+        } else {
+            // Buyer receives the disputed amount immediately.
+            (bool success,) = escrow.buyer.call{value: amount}("");
+
+            if (!success) {
+                revert TransferFailed();
+            }
         }
+
+
+    
+
+    // ---------------------------------------------------------
+    // REPUTATION INTEGRATE HERE
+    // ---------------------------------------------------------
+
+     reputation.recordDisputeOutcome(
+    escrow.seller,
+    escrow.buyer,
+    winner
+);
 
         emit MilestoneResolved(escrowId, milestoneIndex, winner, amount);
-
-        (bool success,) = winner.call{value: amount}("");
-
-        if (!success) {
-            revert TransferFailed();
-        }
     }
 
     // ---------------------------------------------------------
@@ -314,29 +352,17 @@ contract MilestoneEscrow {
         return (milestone.description, milestone.amount, milestone.state);
     }
 
-
-
     // Reputation Viewing function
 
-    function getReputationScore(address user)
-    external
-    view
-    returns (int256)
-{
-    return reputation.getScore(user);
-}
+    function getReputationScore(address user) external view returns (int256) {
+        return reputation.getScore(user);
+    }
 
-function getReputation(address user)
-    external
-    view
-    returns (
-        int256 score,
-        uint256 totalTrades,
-        uint256 disputesWon,
-        uint256 disputesLost,
-        uint256 lastUpdated
-    )
-{
-    return reputation.reputation(user);
-}
+    function getReputation(address user)
+        external
+        view
+        returns (int256 score, uint256 totalTrades, uint256 disputesWon, uint256 disputesLost, uint256 lastUpdated)
+    {
+        return reputation.reputation(user);
+    }
 }

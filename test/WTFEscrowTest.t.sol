@@ -370,7 +370,7 @@ contract WTFEscrowTest is Test {
     // REPUTATION INTEGRATION
     // ---------------------------------------------------------
 
-    function test_ReputationReporterRoleGrantedToEscrow() public {
+    function test_ReputationReporterRoleGrantedToEscrow() public view {
         assertTrue(reputation.hasRole(reputation.REPORTER_ROLE(), address(escrow)));
     }
 
