@@ -38,6 +38,8 @@ contract WTFEscrow is Ownable {
         address payable seller;
         uint256 amount;
         EscrowState state;
+        // ScoreBasedOnDifficulty
+        uint256 difficultyScore;
     }
 
     mapping(uint256 => Escrow) public escrows;
@@ -108,6 +110,7 @@ contract WTFEscrow is Ownable {
     error IncorrectPayment();
     error TransferFailed();
     error AmountNotBeZero();
+    error InvalidDifficultyScore();
 
     error RWAPositionNotFound();
     error NotRWAPositionOwner();
@@ -135,7 +138,11 @@ contract WTFEscrow is Ownable {
 
     // 7. CREATE ESCROW
 
-    function createEscrow(address payable seller) external payable returns (uint256 escrowId) {
+    function createEscrow(address payable seller, uint256 difficultyScore) external payable returns (uint256 escrowId) {
+        if (difficultyScore < 1 || difficultyScore > 3) {
+        revert InvalidDifficultyScore(); // Declare this custom error at top of contract
+    }
+        
         if (msg.value == 0) {
             revert IncorrectPayment();
         }
@@ -143,7 +150,7 @@ contract WTFEscrow is Ownable {
         escrowId = nextEscrowId++;
 
         escrows[escrowId] =
-            Escrow({buyer: payable(msg.sender), seller: seller, amount: msg.value, state: EscrowState.Active});
+            Escrow({buyer: payable(msg.sender), seller: seller, amount: msg.value, state: EscrowState.Active ,difficultyScore:difficultyScore });
 
         emit EscrowCreated(escrowId, msg.sender, seller, msg.value);
     }
@@ -224,7 +231,7 @@ contract WTFEscrow is Ownable {
             revert TransferFailed();
         }
 
-        reputation.recordSuccessfulTrade(e.buyer, e.seller);
+        reputation.recordSuccessfulTrade(e.buyer, e.seller, e.difficultyScore);
     }
 
     // 10. CANCEL ESCROW

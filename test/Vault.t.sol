@@ -160,7 +160,7 @@ contract Vault is Test {
     function test_EscrowSendsFeeToVault() public {
         vm.prank(buyer);
 
-        uint256 escrowId = escrow.createEscrow{value: TRADE_AMOUNT}(payable(seller));
+        uint256 escrowId = escrow.createEscrow{value: TRADE_AMOUNT}(payable(seller), 3);
 
         vm.prank(buyer);
 

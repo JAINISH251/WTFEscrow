@@ -53,7 +53,7 @@ contract WTFEscrowTest is Test {
     function createTestEscrow() internal returns (uint256 escrowId) {
         vm.prank(buyer);
 
-        escrowId = escrow.createEscrow{value: ESCROW_AMOUNT}(payable(seller));
+        escrowId = escrow.createEscrow{value: ESCROW_AMOUNT}(payable(seller) , 3);
     }
 
     function acknowledgeTestDelivery(uint256 escrowId) internal {
@@ -68,7 +68,7 @@ contract WTFEscrowTest is Test {
     function test_CreateEscrow() public {
         uint256 escrowId = createTestEscrow();
 
-        (address escrowBuyer, address escrowSeller, uint256 amount, WTFEscrow.EscrowState state) =
+        (address escrowBuyer, address escrowSeller, uint256 amount, WTFEscrow.EscrowState state,) =
             escrow.escrows(escrowId);
 
         assertEq(escrowBuyer, buyer);
@@ -138,16 +138,16 @@ contract WTFEscrowTest is Test {
         assertEq(address(feeVault).balance, FEE);
 
         // Escrow amount becomes zero.
-        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
+        (,, uint256 amount, WTFEscrow.EscrowState state,) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 
         assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Released));
 
         // Successful trade updates reputation.
-        assertEq(reputation.getScore(buyer), 10);
+        assertEq(reputation.getScore(buyer), 3);
 
-        assertEq(reputation.getScore(seller), 10);
+        assertEq(reputation.getScore(seller), 3);
     }
 
     function test_CannotReleaseBefore72Hours() public {
@@ -187,7 +187,7 @@ contract WTFEscrowTest is Test {
 
         assertEq(buyerBalanceAfter, buyerBalanceBefore + ESCROW_AMOUNT);
 
-        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
+        (,, uint256 amount, WTFEscrow.EscrowState state ,) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 
@@ -205,7 +205,7 @@ contract WTFEscrowTest is Test {
 
         escrow.raiseDispute(escrowId);
 
-        (,,, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
+        (,,, WTFEscrow.EscrowState state ,) = escrow.escrows(escrowId);
 
         assertEq(uint256(state), uint256(WTFEscrow.EscrowState.Disputed));
 
@@ -302,7 +302,7 @@ contract WTFEscrowTest is Test {
         assertEq(buyerBalanceAfter, buyerBalanceBefore + SELLER_AMOUNT);
 
         assertEq(address(feeVault).balance, FEE);
-        (,, uint256 amount, WTFEscrow.EscrowState state) = escrow.escrows(escrowId);
+        (,, uint256 amount, WTFEscrow.EscrowState state , ) = escrow.escrows(escrowId);
 
         assertEq(amount, 0);
 

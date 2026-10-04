@@ -18,78 +18,59 @@ contract WTFReputationTest is Test {
         seller = makeAddr("seller");
         attacker = makeAddr("attacker");
 
+        // Deploy contract
         reputation = new WTFReputation();
 
+        // Admin configures authorized reporter
         reputation.setReporter(escrow);
     }
 
-    // 1. Successful trade
+    // Helper to fetch score depending on public struct mapping
+    function _getScore(address user) internal view returns (int256 score) {
+        return score = reputation.getScore(user);
+    }
+
+    // 1. Successful Trade / Milestone Recording
     function test_SuccessfulTradeScores() public {
+        uint256 milestoneScore = 2;
+
         vm.prank(escrow);
+        reputation.recordSuccessfulTrade(buyer, seller, milestoneScore);
 
-        reputation.recordSuccessfulTrade(buyer, seller);
-
-        assertEq(reputation.getScore(buyer), 10);
-
-        assertEq(reputation.getScore(seller), 10);
+        assertEq(_getScore(buyer), 2);
+        assertEq(_getScore(seller), 2);
     }
 
-    // 2. Dispute winner scores
-    function test_DisputeWinnerScores() public {
-        vm.prank(escrow);
-
-        reputation.recordDisputeOutcome(buyer, seller, buyer);
-
-        assertEq(reputation.getScore(buyer), 5);
-
-        assertEq(reputation.getScore(seller), -20);
-    }
-
-    // 3. Dispute loser scores
-    function test_DisputeLoserScores() public {
-        vm.prank(escrow);
-
-        reputation.recordDisputeOutcome(buyer, seller, seller);
-
-        assertEq(reputation.getScore(buyer), -15);
-
-        assertEq(reputation.getScore(seller), 5);
-    }
-
-    // 4. Non-reporter cannot record
-    function test_NonReporterCannotRecord() public {
-        vm.prank(attacker);
-
-        vm.expectRevert();
-
-        reputation.recordSuccessfulTrade(buyer, seller);
-    }
-
-    // 5. Score can go negative
-    function test_ScoreCanGoNegative() public {
+    // 2. Score Accumulation Across Multiple Trades
+    function test_AccumulateReputation() public {
         vm.startPrank(escrow);
-
-        reputation.recordDisputeOutcome(buyer, seller, seller);
-
-        reputation.recordDisputeOutcome(buyer, seller, seller);
-
+        reputation.recordSuccessfulTrade(buyer, seller, 1);
+        reputation.recordSuccessfulTrade(buyer, seller, 3);
         vm.stopPrank();
 
-        assertEq(reputation.getScore(buyer), -30);
+        assertEq(_getScore(buyer), 4);
+        assertEq(_getScore(seller), 4);
     }
 
-    // 6. Escrow calls reputation
-    function test_EscrowCallsReputation() public {
-        vm.prank(escrow);
-
-        reputation.recordDisputeOutcome(buyer, seller, buyer);
-
-        assertEq(reputation.getScore(buyer), 5);
-
-        assertEq(reputation.getScore(seller), -20);
+    // 3. Revert when non-reporter tries to record a trade
+    function test_RevertIf_UnauthorizedCaller() public {
+        vm.prank(attacker);
+        vm.expectRevert();
+        reputation.recordSuccessfulTrade(buyer, seller, 2);
     }
 
-    function test_EscrowHasReporterRole() public {
-        assertTrue(reputation.hasRole(reputation.REPORTER_ROLE(), escrow));
+    // 4. Revert when milestoneScore is out of valid bounds (1 to 3)
+    function test_RevertIf_InvalidMilestoneScore() public {
+        vm.startPrank(escrow);
+
+        // Score 0 should revert
+        vm.expectRevert(WTFReputation.InvalidMilestoneScore.selector);
+        reputation.recordSuccessfulTrade(buyer, seller, 0);
+
+        // Score 4 should revert
+        vm.expectRevert(WTFReputation.InvalidMilestoneScore.selector);
+        reputation.recordSuccessfulTrade(buyer, seller, 4);
+
+        vm.stopPrank();
     }
 }

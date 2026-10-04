@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -16,53 +17,124 @@ contract WTFReputation is AccessControl {
 
     mapping(address => ReputationData) public reputation;
 
-    int256 public constant TRADE_SUCCESS = 10;
+
+
     int256 public constant DISPUTE_WIN = 5;
     int256 public constant DISPUTE_LOSS = -15;
     int256 public constant BLAMED_WIN = 5;
     int256 public constant BLAMED_LOSS = -20;
 
-    event ReputationUpdated(address indexed user, int256 delta, int256 newScore, string reason);
+    event ReputationUpdated(
+        address indexed user,
+        int256 delta,
+        int256 newScore,
+        string reason
+    );
 
     error NotReporter();
+    error InvalidMilestoneScore();
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    function setReporter(address escrowAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setReporter(address escrowAddress)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         _grantRole(REPORTER_ROLE, escrowAddress);
     }
 
-    function recordSuccessfulTrade(address buyer, address seller) external onlyRole(REPORTER_ROLE) {
-        _update(buyer, TRADE_SUCCESS, "successful_trade");
 
-        _update(seller, TRADE_SUCCESS, "successful_trade");
+
+    function recordSuccessfulTrade(
+        address buyer,
+        address seller,
+        uint256 milestoneScore
+    ) external onlyRole(REPORTER_ROLE) {
+        if (milestoneScore < 1 || milestoneScore > 3) {
+            revert InvalidMilestoneScore();
+        }
+
+        int256 score = int256(milestoneScore);
+
+        _update(
+            buyer,
+            score,
+            "milestone_completed"
+        );
+
+        _update(
+            seller,
+            score,
+            "milestone_completed"
+        );
     }
 
-    function recordDisputeOutcome(address initiator, address respondent, address winner)
-        external
-        onlyRole(REPORTER_ROLE)
-    {
+    // ---------------------------------------------------------
+    // DISPUTE OUTCOME
+    // ---------------------------------------------------------
+
+    function recordDisputeOutcome(
+        address initiator,
+        address respondent,
+        address winner
+    ) external onlyRole(REPORTER_ROLE) {
         bool initiatorWon = (initiator == winner);
 
-        _update(initiator, initiatorWon ? DISPUTE_WIN : DISPUTE_LOSS, initiatorWon ? "dispute_won" : "dispute_lost");
+        _update(
+            initiator,
+            initiatorWon ? DISPUTE_WIN : DISPUTE_LOSS,
+            initiatorWon ? "dispute_won" : "dispute_lost"
+        );
 
-        _update(respondent, initiatorWon ? BLAMED_LOSS : BLAMED_WIN, initiatorWon ? "blamed_lost" : "blamed_won");
+        _update(
+            respondent,
+            initiatorWon ? BLAMED_LOSS : BLAMED_WIN,
+            initiatorWon ? "blamed_lost" : "blamed_won"
+        );
 
-        initiatorWon ? reputation[initiator].disputesWon++ : reputation[initiator].disputesLost++;
-        !initiatorWon ? reputation[respondent].disputesWon++ : reputation[respondent].disputesLost++;
+        if (initiatorWon) {
+            reputation[initiator].disputesWon++;
+            reputation[respondent].disputesLost++;
+        } else {
+            reputation[initiator].disputesLost++;
+            reputation[respondent].disputesWon++;
+        }
     }
 
-    function getScore(address user) external view returns (int256) {
+    // ---------------------------------------------------------
+    // VIEW FUNCTIONS
+    // ---------------------------------------------------------
+
+    function getScore(address user)
+        external
+        view
+        returns (int256)
+    {
         return reputation[user].score;
     }
 
-    function _update(address user, int256 delta, string memory reason) internal {
+    // ---------------------------------------------------------
+    // INTERNAL UPDATE
+    // ---------------------------------------------------------
+
+    function _update(
+        address user,
+        int256 delta,
+        string memory reason
+    ) internal {
         reputation[user].score += delta;
         reputation[user].totalTrades++;
         reputation[user].lastUpdated = block.timestamp;
 
-        emit ReputationUpdated(user, delta, reputation[user].score, reason);
+        emit ReputationUpdated(
+            user,
+            delta,
+            reputation[user].score,
+            reason
+        );
     }
 }
+
+

@@ -4,7 +4,9 @@ pragma solidity ^0.8.20;
 import {IWTFReputation} from "./Interfaces/IWTFReputation.sol";
 
 contract MilestoneEscrow {
-    //interfaces
+    // ---------------------------------------------------------
+    // INTERFACES
+    // ---------------------------------------------------------
 
     IWTFReputation public reputation;
 
@@ -18,6 +20,11 @@ contract MilestoneEscrow {
         Disputed,
         Resolved
     }
+   enum Difficulty {
+    Easy,
+    Medium,
+    Hard
+}
 
     // ---------------------------------------------------------
     // 2. MILESTONE DATA
@@ -26,8 +33,14 @@ contract MilestoneEscrow {
     struct Milestone {
         string description;
         uint256 amount;
+        uint256 reputationScore;
         MilestoneState state;
     }
+
+    // reputationScore:
+    // 1 = Easy
+    // 2 = Medium
+    // 3 = Hard
 
     // ---------------------------------------------------------
     // 3. ESCROW DATA
@@ -39,7 +52,6 @@ contract MilestoneEscrow {
         Milestone[] milestones;
         uint256 totalAmount;
         uint256 releasedAmount;
-        bool reputationRecorded;
     }
 
     mapping(uint256 => MilestoneEscrowData) public escrows;
@@ -57,18 +69,35 @@ contract MilestoneEscrow {
     // ---------------------------------------------------------
 
     event MilestoneEscrowCreated(
-        uint256 indexed escrowId, address indexed buyer, address indexed seller, uint256 totalAmount
+        uint256 indexed escrowId,
+        address indexed buyer,
+        address indexed seller,
+        uint256 totalAmount
     );
 
-    event MilestoneReleased(uint256 indexed escrowId, uint256 indexed milestoneIndex, uint256 amount);
+    event MilestoneReleased(
+        uint256 indexed escrowId,
+        uint256 indexed milestoneIndex,
+        uint256 amount
+    );
 
-    event MilestoneDisputed(uint256 indexed escrowId, uint256 indexed milestoneIndex);
+    event MilestoneDisputed(
+        uint256 indexed escrowId,
+        uint256 indexed milestoneIndex
+    );
 
     event MilestoneResolved(
-        uint256 indexed escrowId, uint256 indexed milestoneIndex, address indexed winner, uint256 amount
+        uint256 indexed escrowId,
+        uint256 indexed milestoneIndex,
+        address indexed winner,
+        uint256 amount
     );
 
-    event ReleasedFundsClaimed(uint256 indexed escrowId, address indexed seller, uint256 amount);
+    event ReleasedFundsClaimed(
+        uint256 indexed escrowId,
+        address indexed seller,
+        uint256 amount
+    );
 
     // ---------------------------------------------------------
     // 6. CUSTOM ERRORS
@@ -84,6 +113,7 @@ contract MilestoneEscrow {
     error NotArbitrator();
     error InvalidWinner();
     error TransferFailed();
+    error InvalidReputationScore();
 
     // ---------------------------------------------------------
     // 7. CONSTRUCTOR
@@ -102,22 +132,41 @@ contract MilestoneEscrow {
     // 8. CREATE MILESTONE ESCROW
     // ---------------------------------------------------------
 
-    function createMilestoneEscrow(address seller, string[] calldata descriptions, uint256[] calldata amounts)
+    function createMilestoneEscrow(
+        address seller,
+        string[] calldata descriptions,
+        uint256[] calldata amounts,
+        uint256[] calldata reputationScores
+    )
         external
         payable
         returns (uint256 escrowId)
     {
+        if (seller == address(0)) {
+            revert InvalidAddress();
+        }
+
         if (descriptions.length == 0) {
             revert InvalidMilestone();
         }
 
-        if (descriptions.length != amounts.length) {
+        if (
+            descriptions.length != amounts.length ||
+            descriptions.length != reputationScores.length
+        ) {
             revert InvalidMilestone();
         }
 
         uint256 totalAmount = 0;
 
         for (uint256 i = 0; i < amounts.length; i++) {
+            if (
+                reputationScores[i] < 1 ||
+                reputationScores[i] > 3
+            ) {
+                revert InvalidReputationScore();
+            }
+
             totalAmount += amounts[i];
         }
 
@@ -134,42 +183,34 @@ contract MilestoneEscrow {
         escrow.totalAmount = totalAmount;
 
         for (uint256 i = 0; i < descriptions.length; i++) {
-            escrow.milestones
-                .push(Milestone({description: descriptions[i], amount: amounts[i], state: MilestoneState.Pending}));
+            escrow.milestones.push(
+                Milestone({
+                    description: descriptions[i],
+                    amount: amounts[i],
+                    reputationScore: reputationScores[i],
+                    state: MilestoneState.Pending
+                })
+            );
         }
 
-        emit MilestoneEscrowCreated(escrowId, msg.sender, seller, totalAmount);
+        emit MilestoneEscrowCreated(
+            escrowId,
+            msg.sender,
+            seller,
+            totalAmount
+        );
     }
 
     // ---------------------------------------------------------
     // 9. RELEASE MILESTONE
     // ---------------------------------------------------------
 
-
-    function _recordSuccessfulTrade(MilestoneEscrowData storage escrow) internal {
-    if (escrow.reputationRecorded) {
-        return;
-    }
-
-    for (uint256 i = 0; i < escrow.milestones.length; i++) {
-        if (escrow.milestones[i].state != MilestoneState.Released) {
-            return;
-        }
-    }
-
-    escrow.reputationRecorded = true;
-
-    reputation.recordSuccessfulTrade(
-        escrow.buyer,
-        escrow.seller
-    );
-}
-
-
-
-
-
-    function releaseMilestone(uint256 escrowId, uint256 milestoneIndex) external {
+    function releaseMilestone(
+        uint256 escrowId,
+        uint256 milestoneIndex
+    )
+        external
+    {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -193,25 +234,44 @@ contract MilestoneEscrow {
 
         // Milestones must be released in order.
         if (milestoneIndex > 0) {
-            if (escrow.milestones[milestoneIndex - 1].state != MilestoneState.Released) {
+            if (
+                escrow.milestones[milestoneIndex - 1].state
+                    != MilestoneState.Released
+            ) {
                 revert MilestoneOutOfOrder();
             }
         }
 
+        // Mark milestone as released first.
         milestone.state = MilestoneState.Released;
 
         escrow.releasedAmount += milestone.amount;
 
-        _recordSuccessfulTrade(escrow);
+        // Award reputation for THIS milestone.
+        // 1 = Easy, 2 = Medium, 3 = Hard.
+        reputation.recordSuccessfulTrade(
+            escrow.buyer,
+            escrow.seller,
+            milestone.reputationScore
+        );
 
-        emit MilestoneReleased(escrowId, milestoneIndex, milestone.amount);
+        emit MilestoneReleased(
+            escrowId,
+            milestoneIndex,
+            milestone.amount
+        );
     }
 
     // ---------------------------------------------------------
     // 10. DISPUTE MILESTONE
     // ---------------------------------------------------------
 
-    function disputeMilestone(uint256 escrowId, uint256 milestoneIndex) external {
+    function disputeMilestone(
+        uint256 escrowId,
+        uint256 milestoneIndex
+    )
+        external
+    {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -235,17 +295,27 @@ contract MilestoneEscrow {
 
         milestone.state = MilestoneState.Disputed;
 
-        emit MilestoneDisputed(escrowId, milestoneIndex);
+        emit MilestoneDisputed(
+            escrowId,
+            milestoneIndex
+        );
     }
 
     // ---------------------------------------------------------
     // 11. RESOLVE MILESTONE
     // ---------------------------------------------------------
 
-    function resolveMilestone(uint256 escrowId, uint256 milestoneIndex, address winner) external {
+    function resolveMilestone(
+        uint256 escrowId,
+        uint256 milestoneIndex,
+        address winner
+    )
+        external
+    {
         if (winner == address(0)) {
             revert InvalidAddress();
         }
+
         if (msg.sender != arbitrator) {
             revert NotArbitrator();
         }
@@ -260,7 +330,10 @@ contract MilestoneEscrow {
             revert InvalidMilestone();
         }
 
-        if (winner != escrow.buyer && winner != escrow.seller) {
+        if (
+            winner != escrow.buyer &&
+            winner != escrow.seller
+        ) {
             revert InvalidWinner();
         }
 
@@ -275,7 +348,7 @@ contract MilestoneEscrow {
         uint256 amount = milestone.amount;
 
         if (winner == escrow.seller) {
-            // Seller will receive the funds through claimReleased().
+            // Seller receives the funds through claimReleased().
             escrow.releasedAmount += amount;
         } else {
             // Buyer receives the disputed amount immediately.
@@ -286,27 +359,31 @@ contract MilestoneEscrow {
             }
         }
 
+        // Keep the existing dispute reputation scoring.
+        //
+        // Seller is treated as the dispute initiator because
+        // disputeMilestone() can only be called by the seller.
+        reputation.recordDisputeOutcome(
+            escrow.seller,
+            escrow.buyer,
+            winner
+        );
 
-    
-
-    // ---------------------------------------------------------
-    // REPUTATION INTEGRATE HERE
-    // ---------------------------------------------------------
-
-     reputation.recordDisputeOutcome(
-    escrow.seller,
-    escrow.buyer,
-    winner
-);
-
-        emit MilestoneResolved(escrowId, milestoneIndex, winner, amount);
+        emit MilestoneResolved(
+            escrowId,
+            milestoneIndex,
+            winner,
+            amount
+        );
     }
 
     // ---------------------------------------------------------
     // 12. CLAIM RELEASED FUNDS
     // ---------------------------------------------------------
 
-    function claimReleased(uint256 escrowId) external {
+    function claimReleased(uint256 escrowId)
+        external
+    {
         MilestoneEscrowData storage escrow = escrows[escrowId];
 
         if (escrow.buyer == address(0)) {
@@ -325,7 +402,11 @@ contract MilestoneEscrow {
 
         escrow.releasedAmount = 0;
 
-        emit ReleasedFundsClaimed(escrowId, escrow.seller, amount);
+        emit ReleasedFundsClaimed(
+            escrowId,
+            escrow.seller,
+            amount
+        );
 
         (bool success,) = escrow.seller.call{value: amount}("");
 
@@ -334,35 +415,72 @@ contract MilestoneEscrow {
         }
     }
 
-    function getMilestone(uint256 escrowId, uint256 milestoneIndex)
+    // ---------------------------------------------------------
+    // 13. GET MILESTONE
+    // ---------------------------------------------------------
+
+    function getMilestone(
+        uint256 escrowId,
+        uint256 milestoneIndex
+    )
         external
         view
-        returns (string memory description, uint256 amount, MilestoneState state)
+        returns (
+            string memory description,
+            uint256 amount,
+            uint256 reputationScore,
+            MilestoneState state
+        )
     {
         if (escrows[escrowId].buyer == address(0)) {
             revert InvalidEscrow();
         }
 
-        if (milestoneIndex >= escrows[escrowId].milestones.length) {
+        if (
+            milestoneIndex >=
+            escrows[escrowId].milestones.length
+        ) {
             revert InvalidMilestone();
         }
 
-        Milestone storage milestone = escrows[escrowId].milestones[milestoneIndex];
+        Milestone storage milestone =
+            escrows[escrowId].milestones[milestoneIndex];
 
-        return (milestone.description, milestone.amount, milestone.state);
+        return (
+            milestone.description,
+            milestone.amount,
+            milestone.reputationScore,
+            milestone.state
+        );
     }
 
-    // Reputation Viewing function
+    // ---------------------------------------------------------
+    // 14. REPUTATION VIEWING
+    // ---------------------------------------------------------
 
-    function getReputationScore(address user) external view returns (int256) {
+    function getReputationScore(address user)
+        external
+        view
+        returns (int256)
+    {
         return reputation.getScore(user);
     }
 
     function getReputation(address user)
         external
         view
-        returns (int256 score, uint256 totalTrades, uint256 disputesWon, uint256 disputesLost, uint256 lastUpdated)
+        returns (
+            int256 score,
+            uint256 totalTrades,
+            uint256 disputesWon,
+            uint256 disputesLost,
+            uint256 lastUpdated
+        )
     {
         return reputation.reputation(user);
     }
 }
+
+
+
+
